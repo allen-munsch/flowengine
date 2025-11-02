@@ -1,0 +1,106 @@
+{
+  "id": "660f9511-f3ac-42e5-b827-557766551111",
+  "name": "API Data Pipeline",
+  "description": "Fetches JSON data, transforms it, and logs results",
+  "nodes": [
+    {
+      "id": "node-http",
+      "node_type": "http.request",
+      "name": "Fetch User Data",
+      "config": {},
+      "position": {
+        "x": 100.0,
+        "y": 100.0
+      },
+      "retry_policy": {
+        "max_attempts": 3,
+        "delay_ms": 1000,
+        "backoff_multiplier": 2.0
+      }
+    },
+    {
+      "id": "node-parse",
+      "node_type": "transform.json_parse",
+      "name": "Parse JSON",
+      "config": {},
+      "position": {
+        "x": 300.0,
+        "y": 100.0
+      },
+      "retry_policy": null
+    },
+    {
+      "id": "node-delay",
+      "node_type": "time.delay",
+      "name": "Wait 1s",
+      "config": {},
+      "position": {
+        "x": 500.0,
+        "y": 100.0
+      },
+      "retry_policy": null
+    },
+    {
+      "id": "node-stringify",
+      "node_type": "transform.json_stringify",
+      "name": "Convert to String",
+      "config": {},
+      "position": {
+        "x": 700.0,
+        "y": 100.0
+      },
+      "retry_policy": null
+    },
+    {
+      "id": "node-log",
+      "node_type": "debug.log",
+      "name": "Log Final Result",
+      "config": {},
+      "position": {
+        "x": 900.0,
+        "y": 100.0
+      },
+      "retry_policy": null
+    }
+  ],
+  "connections": [
+    {
+      "from_node": "node-http",
+      "from_port": "body",
+      "to_node": "node-parse",
+      "to_port": "json"
+    },
+    {
+      "from_node": "node-parse",
+      "from_port": "parsed",
+      "to_node": "node-delay",
+      "to_port": "data"
+    },
+    {
+      "from_node": "node-delay",
+      "from_port": "data",
+      "to_node": "node-stringify",
+      "to_port": "value"
+    },
+    {
+      "from_node": "node-stringify",
+      "from_port": "json",
+      "to_node": "node-log",
+      "to_port": "message"
+    }
+  ],
+  "triggers": [
+    {
+      "id": "trigger-manual",
+      "trigger_type": {
+        "type": "Manual"
+      },
+      "enabled": true
+    }
+  ],
+  "settings": {
+    "max_execution_time_ms": 30000,
+    "max_parallel_nodes": 5,
+    "on_error": "StopWorkflow"
+  }
+}
