@@ -1,0 +1,40 @@
+version: 2
+updates:
+  # Monitor Cargo dependencies in the workspace root
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 10
+
+  # Also monitor dependencies in each crate
+  - package-ecosystem: "cargo"
+    directory: "/crates/flowcli"
+    schedule:
+      interval: "monthly"
+
+  - package-ecosystem: "cargo"
+    directory: "/crates/flowcore"
+    schedule:
+      interval: "monthly"
+
+  - package-ecosystem: "cargo"
+    directory: "/crates/flownodes"
+    schedule:
+      interval: "monthly"
+
+  - package-ecosystem: "cargo"
+    directory: "/crates/flowruntime"
+    schedule:
+      interval: "monthly"
+
+  - package-ecosystem: "cargo"
+    directory: "/crates/flowserver"
+    schedule:
+      interval: "monthly"
+
+  # Also check GitHub Actions versions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
