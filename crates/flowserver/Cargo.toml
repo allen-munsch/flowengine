@@ -23,4 +23,4 @@ tracing-subscriber = { workspace = true }
 # Actix web framework
 actix-web = "4.4"
 actix-cors = "0.7"
-actix-ws = "0.2"
+actix-ws = "0.3"
