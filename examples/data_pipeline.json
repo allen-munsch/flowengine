@@ -4,7 +4,7 @@
   "description": "Fetches JSON data, transforms it, and logs results",
   "nodes": [
     {
-      "id": "node-http",
+      "id": "d78dfffd-0a95-4e30-97b4-dc792d0217c8",
       "node_type": "http.request",
       "name": "Fetch User Data",
       "config": {},
@@ -19,7 +19,7 @@
       }
     },
     {
-      "id": "node-parse",
+      "id": "d78dfffd-0a95-4e30-97b4-dc792d0217c2",
       "node_type": "transform.json_parse",
       "name": "Parse JSON",
       "config": {},
@@ -30,7 +30,7 @@
       "retry_policy": null
     },
     {
-      "id": "node-delay",
+      "id": "d78dfffd-0a95-4e30-97b4-dc792d0217c3",
       "node_type": "time.delay",
       "name": "Wait 1s",
       "config": {},
@@ -41,7 +41,7 @@
       "retry_policy": null
     },
     {
-      "id": "node-stringify",
+      "id": "d78dfffd-0a95-4e30-97b4-dc792d0217c4",
       "node_type": "transform.json_stringify",
       "name": "Convert to String",
       "config": {},
@@ -52,7 +52,7 @@
       "retry_policy": null
     },
     {
-      "id": "node-log",
+      "id": "d78dfffd-0a95-4e30-97b4-dc792d0217c5",
       "node_type": "debug.log",
       "name": "Log Final Result",
       "config": {},
@@ -65,33 +65,33 @@
   ],
   "connections": [
     {
-      "from_node": "node-http",
+      "from_node": "d78dfffd-0a95-4e30-97b4-dc792d0217c8",
       "from_port": "body",
-      "to_node": "node-parse",
+      "to_node": "d78dfffd-0a95-4e30-97b4-dc792d0217c2",
       "to_port": "json"
     },
     {
-      "from_node": "node-parse",
+      "from_node": "d78dfffd-0a95-4e30-97b4-dc792d0217c2",
       "from_port": "parsed",
-      "to_node": "node-delay",
+      "to_node": "d78dfffd-0a95-4e30-97b4-dc792d0217c3",
       "to_port": "data"
     },
     {
-      "from_node": "node-delay",
+      "from_node": "d78dfffd-0a95-4e30-97b4-dc792d0217c3",
       "from_port": "data",
-      "to_node": "node-stringify",
+      "to_node": "d78dfffd-0a95-4e30-97b4-dc792d0217c4",
       "to_port": "value"
     },
     {
-      "from_node": "node-stringify",
+      "from_node": "d78dfffd-0a95-4e30-97b4-dc792d0217c4",
       "from_port": "json",
-      "to_node": "node-log",
+      "to_node": "d78dfffd-0a95-4e30-97b4-dc792d0217c5",
       "to_port": "message"
     }
   ],
   "triggers": [
     {
-      "id": "trigger-manual",
+      "id": "d78dfffd-0a95-4e30-97b4-dc792d0217c6",
       "trigger_type": {
         "type": "Manual"
       },
