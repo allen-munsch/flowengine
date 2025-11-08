@@ -1,0 +1,54 @@
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "name": "Docker Python I/O Example",
+  "description": "Process JSON data with Python in Docker",
+  "nodes": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440001",
+      "node_type": "docker.run",
+      "name": "Python Processor",
+      "config": {
+        "image": {
+          "type": "String",
+          "value": "python:3.9-slim"
+        },
+        "command": {
+          "type": "String",
+          "value": "python -c \"import sys, json; data=json.load(sys.stdin); val=data['value']['value'] if isinstance(data.get('value'), dict) and 'value' in data['value'] else data.get('value', 0); result={'doubled': val * 2}; print(json.dumps(result))\""
+        },
+        "stdin_mode": {
+          "type": "String",
+          "value": "json"
+        },
+        "output_mode": {
+          "type": "String",
+          "value": "auto"
+        },
+        "memory_limit": {
+          "type": "String",
+          "value": "256m"
+        }
+      }
+    },
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440002",
+      "node_type": "debug.log",
+      "name": "Log Result",
+      "config": {}
+    }
+  ],
+  "connections": [
+    {
+      "from_node": "550e8400-e29b-41d4-a716-446655440001",
+      "from_port": "output",
+      "to_node": "550e8400-e29b-41d4-a716-446655440002",
+      "to_port": "message"
+    }
+  ],
+  "triggers": [],
+  "settings": {
+    "max_execution_time_ms": null,
+    "max_parallel_nodes": 10,
+    "on_error": "StopWorkflow"
+  }
+}

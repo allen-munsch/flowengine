@@ -131,14 +131,12 @@ impl WorkflowExecutor {
             .collect();
         
         // Store initial inputs for nodes without dependencies
+        let mut initial_map = HashMap::new();
         for (key, value) in initial_inputs {
-            // Find nodes that can use this input
-            // For now, we'll make these available globally
-            node_outputs.insert(NodeId::nil(), {
-                let mut map = HashMap::new();
-                map.insert(key, value);
-                map
-            });
+            initial_map.insert(key, value);
+        }
+        if !initial_map.is_empty() {
+            node_outputs.insert(NodeId::nil(), initial_map);
         }
         
         loop {
@@ -314,11 +312,22 @@ impl WorkflowExecutor {
         &self,
         node_id: NodeId,
         workflow: &Workflow,
-        graph: &DiGraph<NodeId, ()>,
-        node_to_index: &HashMap<NodeId, NodeIndex>,
+        _graph: &DiGraph<NodeId, ()>,
+        _node_to_index: &HashMap<NodeId, NodeIndex>,
         node_outputs: &HashMap<NodeId, HashMap<String, Value>>,
     ) -> HashMap<String, Value> {
         let mut inputs = HashMap::new();
+        
+        // Check if this node has any incoming connections
+        let has_predecessors = workflow.connections.iter()
+            .any(|conn| conn.to_node == node_id);
+        
+        // If no predecessors, use initial inputs from NodeId::nil()
+        if !has_predecessors {
+            if let Some(initial_inputs) = node_outputs.get(&NodeId::nil()) {
+                inputs.extend(initial_inputs.clone());
+            }
+        }
         
         // Find connections leading to this node
         for conn in &workflow.connections {

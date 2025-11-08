@@ -9,7 +9,7 @@ mod time;
 mod docker;
 
 pub use debug::DebugNode;
-pub use docker::DockerNodeFactory;
+pub use docker::{DockerNode, DockerNodeFactory};
 pub use http::HttpRequestNode;
 pub use transform::{JsonParseNode, JsonStringifyNode};
 pub use time::DelayNode;

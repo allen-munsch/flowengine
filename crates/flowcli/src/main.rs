@@ -1,3 +1,5 @@
+// crates/flowcli/src/main.rs
+
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use flowcore::{ExecutionEvent, Value, Workflow};
@@ -48,6 +50,32 @@ enum Commands {
     },
 }
 
+/// Convert a serde_json::Value to flowcore::Value
+fn json_to_value(json: serde_json::Value) -> Value {
+    match json {
+        serde_json::Value::Null => Value::Null,
+        serde_json::Value::Bool(b) => Value::Bool(b),
+        serde_json::Value::Number(n) => {
+            if let Some(f) = n.as_f64() {
+                Value::Number(f)
+            } else {
+                Value::Number(n.as_i64().unwrap_or(0) as f64)
+            }
+        }
+        serde_json::Value::String(s) => Value::String(s),
+        serde_json::Value::Array(arr) => {
+            Value::Array(arr.into_iter().map(json_to_value).collect())
+        }
+        serde_json::Value::Object(obj) => {
+            let map: HashMap<String, Value> = obj
+                .into_iter()
+                .map(|(k, v)| (k, json_to_value(v)))
+                .collect();
+            Value::Object(map)
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -96,9 +124,19 @@ async fn run_workflow(file: PathBuf, input: Option<String>) -> Result<()> {
     println!("   Connections: {}", workflow.connections.len());
     println!();
     
-    // Parse input data
+    // Parse input data - convert plain JSON to Value types
     let inputs: HashMap<String, Value> = if let Some(input_str) = input {
-        serde_json::from_str(&input_str)?
+        // Parse as plain JSON first
+        let json: serde_json::Value = serde_json::from_str(&input_str)?;
+        
+        // Convert to HashMap<String, Value>
+        if let serde_json::Value::Object(obj) = json {
+            obj.into_iter()
+                .map(|(k, v)| (k, json_to_value(v)))
+                .collect()
+        } else {
+            return Err(anyhow::anyhow!("Input must be a JSON object"));
+        }
     } else {
         HashMap::new()
     };

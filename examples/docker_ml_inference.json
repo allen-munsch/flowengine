@@ -1,0 +1,86 @@
+{
+  "id": "748a2e89-54c7-479d-bbfe-f691140c838a",
+  "name": "ML Model Inference Pipeline",
+  "description": "Multi-model inference with preprocessing and postprocessing",
+  "nodes": [
+    {
+      "id": "d78dfffd-0a95-4e30-97b4-dc792d0217c8",
+      "node_type": "docker.run",
+      "name": "Preprocess Input",
+      "config": {
+        "image": {"type": "String", "value": "python:3.9-slim"},
+        "command": {"type": "String", "value": "python -c \"import sys, json; data=json.load(sys.stdin); text=data.get('text', {}).get('value', ''); cleaned=text.lower().strip(); tokens=cleaned.split(); print(json.dumps({'text': cleaned, 'tokens': tokens, 'token_count': len(tokens)}))\""},
+        "stdin_mode": {"type": "String", "value": "json"},
+        "output_mode": {"type": "String", "value": "json"}
+      }
+    },
+    {
+      "id": "4f16f233-4b60-4af6-9abf-919b42314e33",
+      "node_type": "docker.run",
+      "name": "Sentiment Analysis",
+      "config": {
+        "image": {"type": "String", "value": "python:3.9-slim"},
+        "command": {"type": "String", "value": "python -c \"import sys, json, random; random.seed(42); data=json.load(sys.stdin); text=data.get('preprocessed', {}).get('value', {}).get('text', ''); positive_words=['good', 'great', 'excellent', 'amazing', 'wonderful']; negative_words=['bad', 'terrible', 'awful', 'horrible', 'poor']; pos_count=sum(1 for w in positive_words if w in text); neg_count=sum(1 for w in negative_words if w in text); score=0.7 if pos_count>neg_count else 0.3 if neg_count>pos_count else 0.5; label='POSITIVE' if score>0.5 else 'NEGATIVE' if score<0.5 else 'NEUTRAL'; print(json.dumps({'label': label, 'score': score, 'confidence': abs(score-0.5)*2}))\""},
+        "stdin_mode": {"type": "String", "value": "json"},
+        "output_mode": {"type": "String", "value": "json"},
+        "memory_limit": {"type": "String", "value": "512m"},
+        "timeout": {"type": "Number", "value": 30}
+      }
+    },
+    {
+      "id": "e4e771c7-5840-4f78-86f1-c32310099dc9",
+      "node_type": "docker.run",
+      "name": "Topic Classification",
+      "config": {
+        "image": {"type": "String", "value": "python:3.9-slim"},
+        "command": {"type": "String", "value": "python -c \"import sys, json; data=json.load(sys.stdin); text=data.get('preprocessed', {}).get('value', {}).get('text', ''); topics={'tech': ['computer', 'software', 'programming', 'code'], 'sports': ['game', 'team', 'player', 'score'], 'business': ['market', 'company', 'profit', 'sales']}; scores={t: sum(1 for w in words if w in text) for t, words in topics.items()}; top_topic=max(scores, key=scores.get) if any(scores.values()) else 'general'; print(json.dumps({'topic': top_topic, 'confidence': max(scores.values())/max(1, sum(scores.values()))}))\""},
+        "stdin_mode": {"type": "String", "value": "json"},
+        "output_mode": {"type": "String", "value": "json"},
+        "memory_limit": {"type": "String", "value": "512m"}
+      }
+    },
+    {
+      "id": "e2ffa54e-a856-4179-a565-01a100c8e04d",
+      "node_type": "docker.run",
+      "name": "Combine Model Outputs",
+      "config": {
+        "image": {"type": "String", "value": "python:3.9-slim"},
+        "command": {"type": "String", "value": "python -c \"import sys, json; data=json.load(sys.stdin); sentiment=data.get('sentiment', {}).get('value', {}); topic=data.get('topic', {}).get('value', {}); combined={'sentiment': sentiment.get('label'), 'sentiment_score': sentiment.get('score'), 'topic': topic.get('topic'), 'topic_confidence': topic.get('confidence'), 'overall_confidence': (sentiment.get('confidence', 0) + topic.get('confidence', 0)) / 2}; print(json.dumps(combined))\""},
+        "stdin_mode": {"type": "String", "value": "json"},
+        "output_mode": {"type": "String", "value": "json"}
+      }
+    },
+    {
+      "id": "d3412b75-93ab-413c-b506-9eab4ffadbbe",
+      "node_type": "docker.run",
+      "name": "Format Response",
+      "config": {
+        "image": {"type": "String", "value": "python:3.9-slim"},
+        "command": {"type": "String", "value": "python -c \"import sys, json; from datetime import datetime; data=json.load(sys.stdin); results=data.get('combined', {}).get('value', {}); meta=data.get('preprocessed', {}).get('value', {}); response={'timestamp': datetime.utcnow().isoformat(), 'input_tokens': meta.get('token_count'), 'analysis': results, 'status': 'success'}; print(json.dumps(response))\""},
+        "stdin_mode": {"type": "String", "value": "json"},
+        "output_mode": {"type": "String", "value": "json"}
+      }
+    },
+    {
+      "id": "9a89e505-3adb-4412-9f6c-e915a86c67a9",
+      "node_type": "debug.log",
+      "name": "Output Results",
+      "config": {}
+    }
+  ],
+  "connections": [
+    {"from_node": "d78dfffd-0a95-4e30-97b4-dc792d0217c8", "from_port": "output", "to_node": "4f16f233-4b60-4af6-9abf-919b42314e33", "to_port": "preprocessed"},
+    {"from_node": "d78dfffd-0a95-4e30-97b4-dc792d0217c8", "from_port": "output", "to_node": "e4e771c7-5840-4f78-86f1-c32310099dc9", "to_port": "preprocessed"},
+    {"from_node": "4f16f233-4b60-4af6-9abf-919b42314e33", "from_port": "output", "to_node": "e2ffa54e-a856-4179-a565-01a100c8e04d", "to_port": "sentiment"},
+    {"from_node": "e4e771c7-5840-4f78-86f1-c32310099dc9", "from_port": "output", "to_node": "e2ffa54e-a856-4179-a565-01a100c8e04d", "to_port": "topic"},
+    {"from_node": "e2ffa54e-a856-4179-a565-01a100c8e04d", "from_port": "output", "to_node": "d3412b75-93ab-413c-b506-9eab4ffadbbe", "to_port": "combined"},
+    {"from_node": "d78dfffd-0a95-4e30-97b4-dc792d0217c8", "from_port": "output", "to_node": "d3412b75-93ab-413c-b506-9eab4ffadbbe", "to_port": "preprocessed"},
+    {"from_node": "d3412b75-93ab-413c-b506-9eab4ffadbbe", "from_port": "output", "to_node": "9a89e505-3adb-4412-9f6c-e915a86c67a9", "to_port": "message"}
+  ],
+  "triggers": [],
+  "settings": {
+    "max_execution_time_ms": 60000,
+    "max_parallel_nodes": 10,
+    "on_error": "StopWorkflow"
+  }
+}

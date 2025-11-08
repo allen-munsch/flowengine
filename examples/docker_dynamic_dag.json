@@ -1,0 +1,95 @@
+{
+  "id": "6a2185ff-0fc7-4a30-9e5b-349f899e2a5a",
+  "name": "Local Dynamic Pipeline Test",
+  "description": "Pure Docker-based fan-out/fan-in pattern without external dependencies",
+  "nodes": [
+    {
+      "id": "1d76ecdf-72a6-404b-a276-07b604a91fa5",
+      "node_type": "docker.run",
+      "name": "Generate Data",
+      "config": {
+        "image": {"type": "String", "value": "python:3.9-slim"},
+        "command": {"type": "String", "value": "python -c \"import json; data = list(range(1, 21)); print(json.dumps({'numbers': data, 'total': len(data)}))\""},
+        "stdin_mode": {"type": "String", "value": "none"},
+        "output_mode": {"type": "String", "value": "json"}
+      }
+    },
+    {
+      "id": "2c9b910c-d3ca-4fcd-b3d0-6b33e8638fce",
+      "node_type": "docker.run",
+      "name": "Split Into Chunks",
+      "config": {
+        "image": {"type": "String", "value": "python:3.9-slim"},
+        "command": {"type": "String", "value": "python -c \"import sys, json; data=json.load(sys.stdin); nums=data.get('output', {}).get('value', {}).get('numbers', []); mid=len(nums)//2; print(json.dumps({'first': nums[:mid], 'second': nums[mid:], 'original_count': len(nums)}))\""},
+        "stdin_mode": {"type": "String", "value": "json"},
+        "output_mode": {"type": "String", "value": "json"}
+      }
+    },
+    {
+      "id": "32643ded-1d60-4760-83ae-7f38f52bf8f5",
+      "node_type": "docker.run",
+      "name": "Process First Chunk",
+      "config": {
+        "image": {"type": "String", "value": "python:3.9-slim"},
+        "command": {"type": "String", "value": "python -c \"import sys, json; data=json.load(sys.stdin); nums=data.get('chunks', {}).get('value', {}).get('first', []); result={'sum': sum(nums), 'count': len(nums), 'min': min(nums) if nums else 0, 'max': max(nums) if nums else 0}; print(json.dumps(result))\""},
+        "stdin_mode": {"type": "String", "value": "json"},
+        "output_mode": {"type": "String", "value": "json"}
+      }
+    },
+    {
+      "id": "46af6d34-5eac-4103-9fbc-10165616f507",
+      "node_type": "docker.run",
+      "name": "Process Second Chunk",
+      "config": {
+        "image": {"type": "String", "value": "python:3.9-slim"},
+        "command": {"type": "String", "value": "python -c \"import sys, json; data=json.load(sys.stdin); nums=data.get('chunks', {}).get('value', {}).get('second', []); result={'sum': sum(nums), 'count': len(nums), 'min': min(nums) if nums else 0, 'max': max(nums) if nums else 0}; print(json.dumps(result))\""},
+        "stdin_mode": {"type": "String", "value": "json"},
+        "output_mode": {"type": "String", "value": "json"}
+      }
+    },
+    {
+      "id": "0a436616-8e57-48e9-bffe-eefb84426c1e",
+      "node_type": "docker.run",
+      "name": "Aggregate Results",
+      "config": {
+        "image": {"type": "String", "value": "python:3.9-slim"},
+        "command": {"type": "String", "value": "python -c \"import sys, json; data=json.load(sys.stdin); r1=data.get('first', {}).get('value', {}); r2=data.get('second', {}).get('value', {}); final={'total_sum': r1.get('sum', 0) + r2.get('sum', 0), 'total_count': r1.get('count', 0) + r2.get('count', 0), 'global_min': min(r1.get('min', 0), r2.get('min', 0)), 'global_max': max(r1.get('max', 0), r2.get('max', 0))}; print(json.dumps(final))\""},
+        "stdin_mode": {"type": "String", "value": "json"},
+        "output_mode": {"type": "String", "value": "json"}
+      }
+    },
+    {
+      "id": "cfa705de-6b18-4ade-917a-a073f5c06114",
+      "node_type": "docker.run",
+      "name": "Validate Pipeline",
+      "config": {
+        "image": {"type": "String", "value": "python:3.9-slim"},
+        "command": {"type": "String", "value": "python -c \"import sys, json; data=json.load(sys.stdin); agg=data.get('aggregated', {}).get('value', {}); meta=data.get('metadata', {}).get('value', {}); expected_sum=210; expected_count=20; actual_sum=agg.get('total_sum', 0); actual_count=agg.get('total_count', 0); valid_sum=actual_sum==expected_sum; valid_count=actual_count==expected_count; print(json.dumps({'valid': valid_sum and valid_count, 'expected_sum': expected_sum, 'actual_sum': actual_sum, 'expected_count': expected_count, 'actual_count': actual_count, 'min': agg.get('global_min'), 'max': agg.get('global_max'), 'status': 'PASS' if valid_sum and valid_count else 'FAIL'}))\""},
+        "stdin_mode": {"type": "String", "value": "json"},
+        "output_mode": {"type": "String", "value": "json"}
+      }
+    },
+    {
+      "id": "199f3491-cd56-47b8-8b58-2d2e4b3e243c",
+      "node_type": "debug.log",
+      "name": "Report Results",
+      "config": {}
+    }
+  ],
+  "connections": [
+    {"from_node": "1d76ecdf-72a6-404b-a276-07b604a91fa5", "from_port": "output", "to_node": "2c9b910c-d3ca-4fcd-b3d0-6b33e8638fce", "to_port": "output"},
+    {"from_node": "2c9b910c-d3ca-4fcd-b3d0-6b33e8638fce", "from_port": "output", "to_node": "32643ded-1d60-4760-83ae-7f38f52bf8f5", "to_port": "chunks"},
+    {"from_node": "2c9b910c-d3ca-4fcd-b3d0-6b33e8638fce", "from_port": "output", "to_node": "46af6d34-5eac-4103-9fbc-10165616f507", "to_port": "chunks"},
+    {"from_node": "32643ded-1d60-4760-83ae-7f38f52bf8f5", "from_port": "output", "to_node": "0a436616-8e57-48e9-bffe-eefb84426c1e", "to_port": "first"},
+    {"from_node": "46af6d34-5eac-4103-9fbc-10165616f507", "from_port": "output", "to_node": "0a436616-8e57-48e9-bffe-eefb84426c1e", "to_port": "second"},
+    {"from_node": "0a436616-8e57-48e9-bffe-eefb84426c1e", "from_port": "output", "to_node": "cfa705de-6b18-4ade-917a-a073f5c06114", "to_port": "aggregated"},
+    {"from_node": "2c9b910c-d3ca-4fcd-b3d0-6b33e8638fce", "from_port": "output", "to_node": "cfa705de-6b18-4ade-917a-a073f5c06114", "to_port": "metadata"},
+    {"from_node": "cfa705de-6b18-4ade-917a-a073f5c06114", "from_port": "output", "to_node": "199f3491-cd56-47b8-8b58-2d2e4b3e243c", "to_port": "message"}
+  ],
+  "triggers": [],
+  "settings": {
+    "max_execution_time_ms": 30000,
+    "max_parallel_nodes": 10,
+    "on_error": "StopWorkflow"
+  }
+}
