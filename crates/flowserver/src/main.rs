@@ -3,7 +3,7 @@ use actix_web::{
     get, post, web, App, HttpResponse, HttpServer, Responder, Result as ActixResult,
 };
 use actix_ws::Message;
-use flowcore::{ExecutionEvent, Value, Workflow, WorkflowId};
+use flowcore::{Value, Workflow, WorkflowId};
 use flowruntime::FlowRuntime;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

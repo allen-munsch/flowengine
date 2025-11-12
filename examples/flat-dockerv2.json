@@ -1,0 +1,39 @@
+{
+  "id": "8b4e7c91-2a3f-4d5e-9f1b-6c8a3e5d7f2b",
+  "name": "Flat JSON Mode Example",
+  "description": "Demonstrates the new flat JSON mode for simplified data handling",
+  "nodes": [
+    {
+      "id": "2f1a8c4e-5b3d-4c9e-8f7a-1b6d4e9c2a5f",
+      "node_type": "docker.run",
+      "name": "Process with Flat JSON",
+      "config": {
+        "image": {"type": "String", "value": "python:3.9-slim"},
+        "command": {"type": "String", "value": "python -c \"import sys, json; data=json.load(sys.stdin); result={'doubled': data['value'] * 2, 'tripled': data['value'] * 3}; print(json.dumps(result))\""},
+        "stdin_mode": {"type": "String", "value": "json"},
+        "output_mode": {"type": "String", "value": "json"},
+        "io_mode": {"type": "String", "value": "flat"}
+      }
+    },
+    {
+      "id": "7c3e9a1d-4f8b-4d2e-9c5a-3f1b7e4d8a6c",
+      "node_type": "debug.log",
+      "name": "Display Results",
+      "config": {}
+    }
+  ],
+  "connections": [
+    {
+      "from_node": "2f1a8c4e-5b3d-4c9e-8f7a-1b6d4e9c2a5f",
+      "from_port": "output",
+      "to_node": "7c3e9a1d-4f8b-4d2e-9c5a-3f1b7e4d8a6c",
+      "to_port": "message"
+    }
+  ],
+  "triggers": [],
+  "settings": {
+    "max_execution_time_ms": 30000,
+    "max_parallel_nodes": 10,
+    "on_error": "StopWorkflow"
+  }
+}
