@@ -44,6 +44,10 @@ cargo build --release
   --file my_workflow.json \
   --input '{"url": "https://api.github.com/zen"}' \
   --verbose
+
+cargo run --bin flow -- \
+run --file examples/data_pipeline.json \
+--input '{"url": "https://api.github.com/repos/rust-lang/rust"}'
 ```
 
 ### Start the HTTP Server

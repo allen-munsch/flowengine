@@ -943,6 +943,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "dagrs"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a4bb104a09802f2db14e50ba926d8bca3a96f50eac8b4798ca8a010e6807ae63"
+dependencies = [
+ "async-trait",
+ "dagrs-derive",
+ "futures",
+ "log",
+ "tokio",
+]
+
+[[package]]
+name = "dagrs-derive"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "351bda7042e6c437e5b18c4638de6206ae7913434c03dad0ac57c4f0841500f9"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.108",
+]
+
+[[package]]
 name = "darling"
 version = "0.21.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1254,6 +1278,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "chrono",
+ "dagrs",
  "flowcore",
  "futures",
  "petgraph",
