@@ -944,9 +944,9 @@ dependencies = [
 
 [[package]]
 name = "dagrs"
-version = "0.5.0"
+version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a4bb104a09802f2db14e50ba926d8bca3a96f50eac8b4798ca8a010e6807ae63"
+checksum = "4251dd90e50d586aa8160b4ef3634aea88f6c80d8f4f26ce69bcad276a5dd085"
 dependencies = [
  "async-trait",
  "dagrs-derive",
