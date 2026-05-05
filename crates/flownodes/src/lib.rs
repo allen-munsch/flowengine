@@ -18,7 +18,7 @@ pub use http::HttpRequestNode;
 pub use shell::ShellExecNode;
 pub use time::DelayNode;
 pub use transform::{JsonParseNode, JsonStringifyNode};
-pub use zypi::ZypiExecNode;
+pub use zypi::{ZypiExecNode, ZypiSessionCreateNode};
 use flowruntime::NodeRegistry;
 
 use std::sync::Arc;
@@ -34,4 +34,5 @@ pub fn register_all(registry: &mut NodeRegistry) {
     registry.register(Arc::new(transform::JsonParseNodeFactory));
     registry.register(Arc::new(transform::JsonStringifyNodeFactory));
     registry.register(Arc::new(zypi::ZypiExecNodeFactory));
+    registry.register(Arc::new(zypi::ZypiSessionCreateNodeFactory));
 }
