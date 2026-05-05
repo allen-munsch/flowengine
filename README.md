@@ -7,6 +7,7 @@ A Rust-based event-driven workflow engine with real-time execution monitoring. L
 - ✨ **Event-Driven Architecture** — Reactive, real-time workflows with broadcast events
 - ⚡ **Parallel DAG Execution** — Configurable parallelism with topological sort
 - 🔥 **Firecracker Sandboxing** — Execute nodes in Zypi Firecracker microVMs (sub-second boot)
+- 🌐 **Headless Browser** — Render HTML/URLs in sandboxed Chromium (dom, text, screenshots)
 - 🐚 **Shell & Process Nodes** — Run local commands with streaming stdout/stderr
 - 🐳 **Docker Nodes** — Run containers with full config (env, volumes, resource limits, I/O modes)
 - 🔄 **Retry with Backoff** — Exponential backoff, max delays, per-node retry policies
@@ -199,7 +200,7 @@ flow.save("workflow.json")
   - Events: real-time `StdoutLine` / `StderrLine` streaming
 
 - **`zypi.exec`** — Execute in Firecracker microVM via Zypi API
-  - Config: `url`, `image`, `command`, `env`, `workdir`, `timeout`
+  - Config: `url`, `image`, `command`, `env`, `workdir`, `timeout`, `memory_mb`, `vcpus`
   - Inputs: `stdin`, `files` (object), `file:<path>` (individual files)
   - Outputs: `output`, `stdout`, `stderr`, `exit_code`, `success`, `duration_ms`
 
@@ -210,6 +211,14 @@ flow.save("workflow.json")
   - I/O modes: `flat` (plain values), `wrapped` (Value enum), `auto`
   - Inputs: `data` (stdin)
   - Outputs: `output`, `stdout`, `stderr`, `exit_code`, `success`
+
+### Browser
+
+- **`browser.render`** — Render HTML in sandboxed headless Chromium
+  - Config: `url` or `html`, `mode` (dom/text/screenshot), `wait_ms`, `memory_mb` (512), `timeout`
+  - Outputs: `output`, `stdout` (rendered content)
+  - Modes: `text` (extracted text via lynx), `dom` (full HTML), `screenshot` (base64 PNG)
+  - Requires `chromium-browser` in Zypi image and `memory_mb` Zypi API support
 
 ### HTTP
 
