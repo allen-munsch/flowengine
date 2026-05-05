@@ -1,0 +1,59 @@
+{
+  "id": "a1b2c3d4-e5f6-4890-abcd-ef1234567004",
+  "name": "Streaming Output Demo",
+  "description": "Demonstrates real-time streaming stdout/stderr from a long-running command",
+  "nodes": [
+    {
+      "id": "a1b2c3d4-e5f6-4890-abcd-ef1234567401",
+      "node_type": "shell.exec",
+      "name": "Streaming Countdown",
+      "config": {
+        "command": {"type": "String", "value": "/bin/sh"},
+        "args": {"type": "Array", "value": [
+          {"type": "String", "value": "-c"},
+          {"type": "String", "value": "for i in 5 4 3 2 1; do echo \"Tick: $i\"; sleep 0.2; done; echo '🚀 Liftoff!'"}
+        ]},
+        "stream_output": {"type": "Bool", "value": true},
+        "timeout": {"type": "Number", "value": 10}
+      }
+    },
+    {
+      "id": "a1b2c3d4-e5f6-4890-abcd-ef1234567402",
+      "node_type": "shell.exec",
+      "name": "Process Streamed Output",
+      "config": {
+        "command": {"type": "String", "value": "/usr/bin/wc"},
+        "args": {"type": "Array", "value": [
+          {"type": "String", "value": "-l"}
+        ]},
+        "timeout": {"type": "Number", "value": 5}
+      }
+    },
+    {
+      "id": "a1b2c3d4-e5f6-4890-abcd-ef1234567403",
+      "node_type": "debug.log",
+      "name": "Show Line Count",
+      "config": {}
+    }
+  ],
+  "connections": [
+    {
+      "from_node": "a1b2c3d4-e5f6-4890-abcd-ef1234567401",
+      "from_port": "stdout",
+      "to_node": "a1b2c3d4-e5f6-4890-abcd-ef1234567402",
+      "to_port": "stdin"
+    },
+    {
+      "from_node": "a1b2c3d4-e5f6-4890-abcd-ef1234567402",
+      "from_port": "stdout",
+      "to_node": "a1b2c3d4-e5f6-4890-abcd-ef1234567403",
+      "to_port": "message"
+    }
+  ],
+  "triggers": [],
+  "settings": {
+    "max_execution_time_ms": 30000,
+    "max_parallel_nodes": 10,
+    "on_error": "StopWorkflow"
+  }
+}
