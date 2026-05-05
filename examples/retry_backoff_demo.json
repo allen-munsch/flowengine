@@ -1,0 +1,47 @@
+{
+  "id": "a1b2c3d4-e5f6-4890-abcd-ef1234567005",
+  "name": "Retry & Backoff Demo",
+  "description": "Demonstrates exponential backoff retry by failing intentionally then succeeding",
+  "nodes": [
+    {
+      "id": "a1b2c3d4-e5f6-4890-abcd-ef1234567501",
+      "node_type": "shell.exec",
+      "name": "Flaky Command (retries 3x)",
+      "config": {
+        "command": {"type": "String", "value": "/bin/sh"},
+        "args": {"type": "Array", "value": [
+          {"type": "String", "value": "-c"},
+          {"type": "String", "value": "ATTEMPT_FILE=/tmp/flow_retry_attempt; count=$(cat $ATTEMPT_FILE 2>/dev/null || echo 0); count=$((count + 1)); echo $count > $ATTEMPT_FILE; echo \"Attempt $count\"; if [ $count -lt 3 ]; then echo 'Simulated failure' >&2; exit 1; else echo 'Success on attempt 3!'; fi"}
+        ]},
+        "timeout": {"type": "Number", "value": 5}
+      },
+      "retry_policy": {
+        "max_attempts": 4,
+        "delay_ms": 500,
+        "backoff_multiplier": 2.0,
+        "max_delay_ms": 5000,
+        "retry_on_timeout": true
+      }
+    },
+    {
+      "id": "a1b2c3d4-e5f6-4890-abcd-ef1234567502",
+      "node_type": "debug.log",
+      "name": "Final Output",
+      "config": {}
+    }
+  ],
+  "connections": [
+    {
+      "from_node": "a1b2c3d4-e5f6-4890-abcd-ef1234567501",
+      "from_port": "stdout",
+      "to_node": "a1b2c3d4-e5f6-4890-abcd-ef1234567502",
+      "to_port": "message"
+    }
+  ],
+  "triggers": [],
+  "settings": {
+    "max_execution_time_ms": 30000,
+    "max_parallel_nodes": 10,
+    "on_error": "StopWorkflow"
+  }
+}
