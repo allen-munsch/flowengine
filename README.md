@@ -1,6 +1,7 @@
 # Flow Engine 🚀
 
-A Rust-based event-driven workflow engine with real-time execution monitoring. Like Prefect, but faster, simpler, and sandboxed with Firecracker microVMs.
+A Rust-based event-driven workflow engine with real-time execution monitoring.
+Designed for sandboxed, parallel DAG execution with Firecracker microVMs.
 
 ## Features
 
@@ -17,18 +18,20 @@ A Rust-based event-driven workflow engine with real-time execution monitoring. L
 - 🎯 **Type-Safe** — Rust type system for reliability, no runtime surprises
 - 📊 **Observability** — Detailed execution metrics, tracing, event bus
 
-## vs Prefect
+## How It Compares
 
-| | FlowEngine | Prefect |
-|---|---|---|
-| **Runtime** | Rust (fast, single binary) | Python (GIL-bound, heavy env) |
-| **Sandbox** | Firecracker μVMs (sub-second) | Docker only |
-| **Latency per node** | <10ms | 100–500ms |
-| **Streaming** | Native WebSocket events | Polling |
-| **Python API** | `@task`, `Flow`, `Sandbox` | `@task`, `@flow` |
-| **Retry** | Exponential backoff | Exponential backoff |
-| **Caching** | Content-fingerprint (SQLite) | Result persistence |
-| **Deployment** | Single binary (`flow` + `flowserver`) | Python env + server |
+FlowEngine focuses on speed, sandboxing, and streaming. Here's how it stacks up against familiar tools:
+
+| | FlowEngine | Prefect | Airflow |
+|---|---|---|---|
+| **Runtime** | Rust (single binary) | Python | Python |
+| **Sandbox** | Firecracker μVMs | Docker | Docker/K8s |
+| **Streaming** | Native WebSocket | Polling | Log files |
+| **Latency** | <10ms per node | 100–500ms | 500ms+ |
+| **Python API** | `@task`, `Flow`, `Sandbox` | `@task`, `@flow` | `@task`, DAG |
+| **Retry** | Exponential backoff | Exponential backoff | Linear |
+| **Persistence** | SQLite (built-in) | Postgres | Postgres |
+| **Deployment** | `flow` + `flowserver` binaries | Server + workers | Scheduler + workers |
 
 ## Architecture
 
@@ -444,9 +447,8 @@ MIT OR Apache-2.0
 
 ## Acknowledgments
 
-Inspired by:
-- **Prefect** — Python workflow orchestration
-- **n8n** — Node-based automation
-- **Apache Airflow** — DAG scheduling
-- **Firecracker** — MicroVM sandboxing
-- **Bevy** — ECS architecture
+Inspired by excellent workflow tools that came before:
+- **Prefect** — Pioneered the Python-native DAG workflow model
+- **Apache Airflow** — Established DAG scheduling as a pattern
+- **n8n** — Node-based visual automation
+- **Firecracker** — MicroVM sandboxing from AWS
