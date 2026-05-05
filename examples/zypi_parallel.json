@@ -1,0 +1,120 @@
+{
+  "id": "a1b2c3d4-e5f6-4890-abcd-ef1234567001",
+  "name": "Parallel Zypi Sandbox Pipeline",
+  "description": "Runs two Firecracker sandboxes in parallel — sentiment + topic analysis",
+  "nodes": [
+    {
+      "id": "a1b2c3d4-e5f6-4890-abcd-ef1234567101",
+      "node_type": "shell.exec",
+      "name": "Prepare Input",
+      "config": {
+        "command": {"type": "String", "value": "/usr/bin/echo"},
+        "args": {"type": "Array", "value": [
+          {"type": "String", "value": "The new Rust workflow engine is incredibly fast and reliable"}
+        ]},
+        "stream_output": {"type": "Bool", "value": false}
+      }
+    },
+    {
+      "id": "a1b2c3d4-e5f6-4890-abcd-ef1234567102",
+      "node_type": "zypi.exec",
+      "name": "Sentiment Analysis",
+      "config": {
+        "url": {"type": "String", "value": "http://localhost:4000"},
+        "image": {"type": "String", "value": "ubuntu:24.04"},
+        "command": {"type": "Array", "value": [
+          {"type": "String", "value": "/usr/bin/python3"},
+          {"type": "String", "value": "-c"},
+          {"type": "String", "value": "import os; text=os.environ.get('STDOUT',''); positive=['fast','reliable','incredibly','great','excellent']; negative=['slow','broken','bad','terrible']; pos=sum(1 for w in positive if w in text.lower()); neg=sum(1 for w in negative if w in text.lower()); print(f'{{\"sentiment\": \"positive\" if pos>neg else \"negative\", \"score\": {pos-neg}}}')"}
+        ]},
+        "timeout": {"type": "Number", "value": 15}
+      },
+      "retry_policy": {
+        "max_attempts": 2,
+        "delay_ms": 500,
+        "backoff_multiplier": 2.0,
+        "max_delay_ms": 5000,
+        "retry_on_timeout": true
+      }
+    },
+    {
+      "id": "a1b2c3d4-e5f6-4890-abcd-ef1234567103",
+      "node_type": "zypi.exec",
+      "name": "Word Count Analysis",
+      "config": {
+        "url": {"type": "String", "value": "http://localhost:4000"},
+        "image": {"type": "String", "value": "ubuntu:24.04"},
+        "command": {"type": "Array", "value": [
+          {"type": "String", "value": "/usr/bin/python3"},
+          {"type": "String", "value": "-c"},
+          {"type": "String", "value": "import os; text=os.environ.get('STDOUT',''); words=text.split(); print(f'{{\"word_count\": {len(words)}, \"avg_length\": {sum(len(w) for w in words)/max(1,len(words)):.1f}}}')"}
+        ]},
+        "timeout": {"type": "Number", "value": 15}
+      },
+      "retry_policy": {
+        "max_attempts": 2,
+        "delay_ms": 500,
+        "backoff_multiplier": 2.0,
+        "max_delay_ms": 5000,
+        "retry_on_timeout": true
+      }
+    },
+    {
+      "id": "a1b2c3d4-e5f6-4890-abcd-ef1234567104",
+      "node_type": "shell.exec",
+      "name": "Combine Results",
+      "config": {
+        "command": {"type": "String", "value": "/usr/bin/python3"},
+        "args": {"type": "Array", "value": [
+          {"type": "String", "value": "-c"},
+          {"type": "String", "value": "import sys, json, os; sentiment=os.environ.get('SENTIMENT_OUTPUT','{}'); wordcount=os.environ.get('WORDCOUNT_OUTPUT','{}'); s=json.loads(sentiment); w=json.loads(wordcount); combined={'sentiment':s.get('sentiment'),'sentiment_score':s.get('score'),'word_count':w.get('word_count'),'avg_word_length':w.get('avg_length')}; print(json.dumps(combined))"}
+        ]},
+        "timeout": {"type": "Number", "value": 10}
+      }
+    },
+    {
+      "id": "a1b2c3d4-e5f6-4890-abcd-ef1234567105",
+      "node_type": "debug.log",
+      "name": "Output Results",
+      "config": {}
+    }
+  ],
+  "connections": [
+    {
+      "from_node": "a1b2c3d4-e5f6-4890-abcd-ef1234567101",
+      "from_port": "stdout",
+      "to_node": "a1b2c3d4-e5f6-4890-abcd-ef1234567102",
+      "to_port": "stdin"
+    },
+    {
+      "from_node": "a1b2c3d4-e5f6-4890-abcd-ef1234567101",
+      "from_port": "stdout",
+      "to_node": "a1b2c3d4-e5f6-4890-abcd-ef1234567103",
+      "to_port": "stdin"
+    },
+    {
+      "from_node": "a1b2c3d4-e5f6-4890-abcd-ef1234567102",
+      "from_port": "output",
+      "to_node": "a1b2c3d4-e5f6-4890-abcd-ef1234567104",
+      "to_port": "SENTIMENT_OUTPUT"
+    },
+    {
+      "from_node": "a1b2c3d4-e5f6-4890-abcd-ef1234567103",
+      "from_port": "output",
+      "to_node": "a1b2c3d4-e5f6-4890-abcd-ef1234567104",
+      "to_port": "WORDCOUNT_OUTPUT"
+    },
+    {
+      "from_node": "a1b2c3d4-e5f6-4890-abcd-ef1234567104",
+      "from_port": "output",
+      "to_node": "a1b2c3d4-e5f6-4890-abcd-ef1234567105",
+      "to_port": "message"
+    }
+  ],
+  "triggers": [],
+  "settings": {
+    "max_execution_time_ms": 60000,
+    "max_parallel_nodes": 10,
+    "on_error": "StopWorkflow"
+  }
+}

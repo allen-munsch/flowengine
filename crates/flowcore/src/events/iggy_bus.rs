@@ -10,7 +10,7 @@ use std::fmt;
 use std::sync::Arc;
 use futures_util::StreamExt;
 
-use crate::{EventEmitter, EventBus, ExecutionEvent, NodeEvent};
+use crate::{ExecutionEvent};
 
 /// Configuration for Iggy event bus
 #[derive(Debug, Clone)]

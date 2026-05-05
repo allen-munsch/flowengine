@@ -210,9 +210,10 @@ impl Node for ShellExecNode {
         let stdout_handle = child.stdout.take();
         let stderr_handle = child.stderr.take();
 
-        // Read stdout with optional streaming
+        // Read stdout with optional streaming and capture
         let ctx_for_stdout = ctx.clone();
         let stream_stdout = config.stream_output;
+        let capture_stdout = config.capture_stdout;
         let stdout_task = async move {
             let mut all_data = Vec::new();
             if let Some(stdout) = stdout_handle {
@@ -222,8 +223,10 @@ impl Node for ShellExecNode {
                     if stream_stdout {
                         ctx_for_stdout.events.stdout_line(&line);
                     }
-                    all_data.extend_from_slice(line.as_bytes());
-                    all_data.push(b'\n');
+                    if capture_stdout {
+                        all_data.extend_from_slice(line.as_bytes());
+                        all_data.push(b'\n');
+                    }
                 }
             }
             all_data
@@ -231,6 +234,7 @@ impl Node for ShellExecNode {
 
         let ctx_for_stderr = ctx.clone();
         let stream_stderr = config.stream_output;
+        let capture_stderr = config.capture_stderr;
         let stderr_task = async move {
             let mut all_data = Vec::new();
             if let Some(stderr) = stderr_handle {
@@ -240,8 +244,10 @@ impl Node for ShellExecNode {
                     if stream_stderr {
                         ctx_for_stderr.events.stderr_line(&line);
                     }
-                    all_data.extend_from_slice(line.as_bytes());
-                    all_data.push(b'\n');
+                    if capture_stderr {
+                        all_data.extend_from_slice(line.as_bytes());
+                        all_data.push(b'\n');
+                    }
                 }
             }
             all_data
@@ -310,6 +316,19 @@ impl Node for ShellExecNode {
         } else {
             ctx.events
                 .warn(format!("  ⚠️  Exited with code: {}", exit_code));
+
+            // If fail_on_error is true, propagate the non-zero exit as a node error
+            let fail_on_error = ctx
+                .config
+                .get("fail_on_error")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true);
+            if fail_on_error {
+                return Err(NodeError::ExecutionFailed(format!(
+                    "Command exited with code {}",
+                    exit_code
+                )));
+            }
         }
 
         // Try parsing stdout as JSON

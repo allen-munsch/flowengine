@@ -1,0 +1,67 @@
+{
+  "id": "a1b2c3d4-e5f6-4890-abcd-ef1234567002",
+  "name": "Zypi File Injection Demo",
+  "description": "Injects a Python script into the Firecracker sandbox and runs it",
+  "nodes": [
+    {
+      "id": "a1b2c3d4-e5f6-4890-abcd-ef1234567201",
+      "node_type": "shell.exec",
+      "name": "Generate Python Script",
+      "config": {
+        "command": {"type": "String", "value": "/usr/bin/cat"},
+        "stdin": {"type": "String", "value": "import json, sys\ndef analyze(data):\n    nums = [int(x) for x in data.split(',')]\n    return {\n        'count': len(nums),\n        'sum': sum(nums),\n        'mean': sum(nums)/len(nums),\n        'min': min(nums),\n        'max': max(nums),\n        'sorted': sorted(nums)\n    }\nif __name__ == '__main__':\n    result = analyze(sys.argv[1] if len(sys.argv) > 1 else '1,2,3')\n    print(json.dumps(result))\n"}
+      }
+    },
+    {
+      "id": "a1b2c3d4-e5f6-4890-abcd-ef1234567202",
+      "node_type": "zypi.exec",
+      "name": "Run Script in Sandbox",
+      "config": {
+        "url": {"type": "String", "value": "http://localhost:4000"},
+        "image": {"type": "String", "value": "ubuntu:24.04"},
+        "command": {"type": "Array", "value": [
+          {"type": "String", "value": "/usr/bin/python3"},
+          {"type": "String", "value": "/tmp/analyze.py"},
+          {"type": "String", "value": "10,25,33,47,52,68,71,89,94"}
+        ]},
+        "timeout": {"type": "Number", "value": 15},
+        "env": {"type": "Object", "value": {
+          "PYTHONUNBUFFERED": {"type": "String", "value": "1"}
+        }}
+      },
+      "retry_policy": {
+        "max_attempts": 3,
+        "delay_ms": 1000,
+        "backoff_multiplier": 2.0,
+        "max_delay_ms": 10000,
+        "retry_on_timeout": true
+      }
+    },
+    {
+      "id": "a1b2c3d4-e5f6-4890-abcd-ef1234567203",
+      "node_type": "debug.log",
+      "name": "Show Results",
+      "config": {}
+    }
+  ],
+  "connections": [
+    {
+      "from_node": "a1b2c3d4-e5f6-4890-abcd-ef1234567201",
+      "from_port": "stdout",
+      "to_node": "a1b2c3d4-e5f6-4890-abcd-ef1234567202",
+      "to_port": "file:/tmp/analyze.py"
+    },
+    {
+      "from_node": "a1b2c3d4-e5f6-4890-abcd-ef1234567202",
+      "from_port": "output",
+      "to_node": "a1b2c3d4-e5f6-4890-abcd-ef1234567203",
+      "to_port": "message"
+    }
+  ],
+  "triggers": [],
+  "settings": {
+    "max_execution_time_ms": 60000,
+    "max_parallel_nodes": 5,
+    "on_error": "StopWorkflow"
+  }
+}
