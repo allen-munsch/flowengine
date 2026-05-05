@@ -44,8 +44,46 @@ impl Value {
         }
     }
 
+    /// Convert to a displayable string
+    pub fn to_string(&self) -> String {
+        match self {
+            Value::Null => "null".to_string(),
+            Value::Bool(b) => b.to_string(),
+            Value::Number(n) => n.to_string(),
+            Value::String(s) => s.clone(),
+            Value::Bytes(b) => format!("<{} bytes>", b.len()),
+            Value::Json(j) => j.to_string(),
+            Value::Array(arr) => {
+                let items: Vec<String> = arr.iter().map(|v| v.to_string()).collect();
+                format!("[{}]", items.join(", "))
+            }
+            Value::Object(obj) => {
+                let items: Vec<String> = obj.iter()
+                    .map(|(k, v)| format!("{}: {}", k, v.to_string()))
+                    .collect();
+                format!("{{{}}}", items.join(", "))
+            }
+        }
+    }
+
     pub fn is_null(&self) -> bool {
         matches!(self, Value::Null)
+    }
+
+    pub fn as_bytes(&self) -> Option<&[u8]> {
+        match self {
+            Value::Bytes(b) => Some(b),
+            Value::String(s) => Some(s.as_bytes()),
+            _ => None,
+        }
+    }
+
+    pub fn take_bytes(self) -> Option<Vec<u8>> {
+        match self {
+            Value::Bytes(b) => Some(b),
+            Value::String(s) => Some(s.into_bytes()),
+            _ => None,
+        }
     }
 }
 
@@ -82,5 +120,23 @@ impl From<bool> for Value {
 impl From<serde_json::Value> for Value {
     fn from(j: serde_json::Value) -> Self {
         Value::Json(j)
+    }
+}
+
+impl From<Vec<u8>> for Value {
+    fn from(b: Vec<u8>) -> Self {
+        Value::Bytes(b)
+    }
+}
+
+impl From<&[u8]> for Value {
+    fn from(b: &[u8]) -> Self {
+        Value::Bytes(b.to_vec())
+    }
+}
+
+impl From<HashMap<String, Value>> for Value {
+    fn from(m: HashMap<String, Value>) -> Self {
+        Value::Object(m)
     }
 }

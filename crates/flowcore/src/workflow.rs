@@ -99,7 +99,9 @@ impl NodeSpec {
         self.retry_policy = Some(RetryPolicy {
             max_attempts,
             delay_ms,
-            backoff_multiplier: 1.0,
+            backoff_multiplier: 2.0,
+            max_delay_ms: Some(60000),
+            retry_on_timeout: true,
         });
         self
     }
@@ -127,6 +129,8 @@ pub struct RetryPolicy {
     pub max_attempts: u32,
     pub delay_ms: u64,
     pub backoff_multiplier: f64,
+    pub max_delay_ms: Option<u64>,
+    pub retry_on_timeout: bool,
 }
 
 impl Default for RetryPolicy {
@@ -135,6 +139,21 @@ impl Default for RetryPolicy {
             max_attempts: 3,
             delay_ms: 1000,
             backoff_multiplier: 2.0,
+            max_delay_ms: Some(60000),
+            retry_on_timeout: true,
+        }
+    }
+}
+
+impl RetryPolicy {
+    /// Calculate delay for a given attempt (0-indexed)
+    pub fn delay_for_attempt(&self, attempt: u32) -> u64 {
+        let delay = self.delay_ms as f64 * self.backoff_multiplier.powi(attempt as i32);
+        let delay = delay as u64;
+        if let Some(max) = self.max_delay_ms {
+            delay.min(max)
+        } else {
+            delay
         }
     }
 }

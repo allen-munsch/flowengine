@@ -1,0 +1,67 @@
+{
+  "id": "cdca6a1b-e0f4-429c-848f-553a16669059",
+  "name": "Local Shell Pipeline",
+  "description": "Runs local shell commands with streaming output",
+  "nodes": [
+    {
+      "id": "6a1cf4ae-8c65-4955-9064-65b4c877a34c",
+      "node_type": "shell.exec",
+      "name": "Fetch Data via curl",
+      "config": {
+        "command": {"type": "String", "value": "curl"},
+        "args": {"type": "Array", "value": [
+          {"type": "String", "value": "-s"},
+          {"type": "String", "value": "https://api.github.com/zen"}
+        ]},
+        "timeout": {"type": "Number", "value": 30},
+        "stream_output": {"type": "Bool", "value": true}
+      },
+      "retry_policy": {
+        "max_attempts": 3,
+        "delay_ms": 1000,
+        "backoff_multiplier": 2.0,
+        "max_delay_ms": 60000,
+        "retry_on_timeout": true
+      }
+    },
+    {
+      "id": "597ba7a1-e201-4146-a548-83bd51bde9b2",
+      "node_type": "shell.exec",
+      "name": "Process with Python",
+      "config": {
+        "command": {"type": "String", "value": "python3"},
+        "args": {"type": "Array", "value": [
+          {"type": "String", "value": "-c"},
+          {"type": "String", "value": "import sys, json; data=sys.stdin.read(); result={'zen': data.strip(), 'chars': len(data.strip())}; print(json.dumps(result))"}
+        ]},
+        "timeout": {"type": "Number", "value": 10}
+      }
+    },
+    {
+      "id": "af81d1d9-30b4-4b42-ba4e-de307bd6ce2b",
+      "node_type": "debug.log",
+      "name": "Log Result",
+      "config": {}
+    }
+  ],
+  "connections": [
+    {
+      "from_node": "6a1cf4ae-8c65-4955-9064-65b4c877a34c",
+      "from_port": "stdout",
+      "to_node": "597ba7a1-e201-4146-a548-83bd51bde9b2",
+      "to_port": "stdin"
+    },
+    {
+      "from_node": "597ba7a1-e201-4146-a548-83bd51bde9b2",
+      "from_port": "output",
+      "to_node": "af81d1d9-30b4-4b42-ba4e-de307bd6ce2b",
+      "to_port": "message"
+    }
+  ],
+  "triggers": [],
+  "settings": {
+    "max_execution_time_ms": 60000,
+    "max_parallel_nodes": 5,
+    "on_error": "StopWorkflow"
+  }
+}

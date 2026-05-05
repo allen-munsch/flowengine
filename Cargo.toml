@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/flowcore",
+    "crates/flowpersist",
     "crates/flowruntime",
     "crates/flownodes",
     "crates/flowserver",
