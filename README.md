@@ -1,26 +1,45 @@
 # Flow Engine 🚀
 
-A Rust-based event-driven workflow engine with real-time execution monitoring.
+A Rust-based event-driven workflow engine with real-time execution monitoring. Like Prefect, but faster, simpler, and sandboxed with Firecracker microVMs.
 
 ## Features
 
-- ✨ **Event-Driven Architecture** - Built for reactive, real-time workflows
-- ⚡ **Parallel Execution** - DAG-based execution with configurable parallelism
-- 🔌 **Extensible** - Trait-based plugin system for custom nodes
-- 📡 **Real-Time Events** - Subscribe to execution events via broadcast channels
-- 🎯 **Type-Safe** - Leverages Rust's type system for reliability
-- 🔄 **Retry Policies** - Node-level and workflow-level error handling
-- 📊 **Observability** - Detailed execution metrics and logging
+- ✨ **Event-Driven Architecture** — Reactive, real-time workflows with broadcast events
+- ⚡ **Parallel DAG Execution** — Configurable parallelism with topological sort
+- 🔥 **Firecracker Sandboxing** — Execute nodes in Zypi Firecracker microVMs (sub-second boot)
+- 🐚 **Shell & Process Nodes** — Run local commands with streaming stdout/stderr
+- 🐳 **Docker Nodes** — Run containers with full config (env, volumes, resource limits, I/O modes)
+- 🔄 **Retry with Backoff** — Exponential backoff, max delays, per-node retry policies
+- 💾 **SQLite Persistence** — Save/load workflows, execution history, node-level result caching
+- 📡 **Streaming Output** — Real-time stdout/stderr line streaming via WebSocket/CLI
+- 🐍 **Python SDK** — `@task` decorator, `Flow` DAG builder, `Sandbox` for Zypi
+- 🎯 **Type-Safe** — Rust type system for reliability, no runtime surprises
+- 📊 **Observability** — Detailed execution metrics, tracing, event bus
+
+## vs Prefect
+
+| | FlowEngine | Prefect |
+|---|---|---|
+| **Runtime** | Rust (fast, single binary) | Python (GIL-bound, heavy env) |
+| **Sandbox** | Firecracker μVMs (sub-second) | Docker only |
+| **Latency per node** | <10ms | 100–500ms |
+| **Streaming** | Native WebSocket events | Polling |
+| **Python API** | `@task`, `Flow`, `Sandbox` | `@task`, `@flow` |
+| **Retry** | Exponential backoff | Exponential backoff |
+| **Caching** | Content-fingerprint (SQLite) | Result persistence |
+| **Deployment** | Single binary (`flow` + `flowserver`) | Python env + server |
 
 ## Architecture
 
 ```
 flowengine/
-├── flowcore      - Core abstractions (Node trait, Value type, Events)
-├── flowruntime   - Execution engine (DAG executor, Registry)
-├── flownodes     - Standard node library (HTTP, JSON, Debug, etc.)
+├── flowcore      - Core abstractions (Node trait, Value type, Events, RetryPolicy)
+├── flowruntime   - Execution engine (DAG executor, Registry, Runtime)
+├── flownodes     - Standard node library (shell, zypi, docker, http, transform, debug)
+├── flowpersist   - SQLite-backed persistence & result caching
 ├── flowserver    - HTTP/WebSocket API server (Actix-based)
-└── flowcli       - Command-line interface
+├── flowcli       - Command-line interface
+└── python/       - Python SDK (flowengine package)
 ```
 
 ## Quick Start
@@ -31,68 +50,114 @@ flowengine/
 cargo build --release
 ```
 
-### Create an Example Workflow
-
-```bash
-./target/release/flow init --output my_workflow.json
-```
-
-### Run a Workflow
+### Run a Shell Pipeline
 
 ```bash
 ./target/release/flow run \
-  --file my_workflow.json \
-  --input '{"url": "https://api.github.com/zen"}' \
+  --file examples/shell_pipeline.json \
   --verbose
+```
 
-cargo run --bin flow -- \
-run --file examples/data_pipeline.json \
---input '{"url": "https://api.github.com/repos/rust-lang/rust"}'
+### Run a Zypi-Sandboxed Pipeline
+
+```bash
+# Start Zypi first
+cd ../../exs/zypi && docker compose up -d
+
+# Run sandboxed
+./target/release/flow run \
+  --file examples/zypi_sandbox.json \
+  --input '{"value": 42, "text": "hello from firecracker"}' \
+  --verbose
 ```
 
 ### Start the HTTP Server
 
 ```bash
-# Start the API server
 ./target/release/flowserver
-
-# Server runs on http://localhost:3000
-# WebSocket events: ws://localhost:3000/api/events
+# → http://localhost:3000
+# → WebSocket: ws://localhost:3000/api/events
 ```
 
-See [API Documentation](docs/api.md) for HTTP endpoints.
+See [API Documentation](docs/api.md) for full HTTP endpoints.
+
+## Python SDK
+
+```bash
+pip install -e python/
+```
+
+### Decorator-based Workflows
+
+```python
+from flowengine import Flow, task
+import requests
+
+@task(retry=3, timeout=30)
+def fetch_data(url: str) -> dict:
+    return requests.get(url).json()
+
+@task()
+def process(data: dict) -> dict:
+    return {"summary": data["title"]}
+
+flow = Flow("data-pipeline")
+flow >> fetch_data >> process
+result = flow.run(url="https://api.github.com/zen")
+```
+
+### Zypi Sandbox (drop-in for `bubbleproc.py`)
+
+```python
+from flowengine import Sandbox
+
+sandbox = Sandbox(image="ubuntu:24.04")
+
+# Execute commands in Firecracker microVMs
+exit_code, stdout, stderr = sandbox.exec(["python3", "script.py"])
+
+# File injection
+result = sandbox.exec(
+    ["python3", "/app/analyze.py"],
+    files={"/app/analyze.py": "print('sandboxed!')"},
+)
+
+# check_output — raises on failure
+output = sandbox.check_output(["echo", "hello"])
+
+# Context manager
+with Sandbox() as s:
+    s.exec(["ls", "-la"])
+```
 
 ## Workflow Definition
 
-Workflows are defined as JSON files:
+### JSON Format
 
 ```json
 {
   "id": "550e8400-e29b-41d4-a716-446655440000",
   "name": "Example Workflow",
-  "description": "Fetches and processes data",
   "nodes": [
     {
       "id": "node-1",
       "node_type": "http.request",
       "name": "Fetch Data",
       "config": {
-        "type": "String",
-        "value": "GET"
+        "method": {"type": "String", "value": "GET"}
       },
-      "position": { "x": 100, "y": 100 }
+      "retry_policy": {
+        "max_attempts": 3,
+        "delay_ms": 1000,
+        "backoff_multiplier": 2.0,
+        "max_delay_ms": 60000,
+        "retry_on_timeout": true
+      }
     },
     {
       "id": "node-2",
-      "node_type": "transform.json_parse",
-      "name": "Parse Response",
-      "position": { "x": 300, "y": 100 }
-    },
-    {
-      "id": "node-3",
       "node_type": "debug.log",
-      "name": "Log Result",
-      "position": { "x": 500, "y": 100 }
+      "name": "Log Result"
     }
   ],
   "connections": [
@@ -100,20 +165,145 @@ Workflows are defined as JSON files:
       "from_node": "node-1",
       "from_port": "body",
       "to_node": "node-2",
-      "to_port": "json"
-    },
-    {
-      "from_node": "node-2",
-      "from_port": "parsed",
-      "to_node": "node-3",
       "to_port": "message"
     }
   ],
-  "triggers": [],
   "settings": {
     "max_parallel_nodes": 10,
     "on_error": "StopWorkflow"
   }
+}
+```
+
+### Python Builder API
+
+```python
+from flowengine import FlowBuilder, task
+
+builder = FlowBuilder("explicit-pipeline")
+fetch = builder.add(fetch_data)
+proc = builder.add(process)
+builder.connect(fetch, "output", proc, "input")
+flow = builder.build()
+flow.save("workflow.json")
+```
+
+## Built-in Nodes
+
+### Shell & Process
+
+- **`shell.exec`** — Execute local commands
+  - Config: `command`, `args`, `env`, `workdir`, `timeout`, `shell`, `stream_output`, `env_passthrough`
+  - Inputs: `stdin` (piped to process)
+  - Outputs: `output`, `stdout`, `stderr`, `exit_code`, `success`
+  - Events: real-time `StdoutLine` / `StderrLine` streaming
+
+- **`zypi.exec`** — Execute in Firecracker microVM via Zypi API
+  - Config: `url`, `image`, `command`, `env`, `workdir`, `timeout`
+  - Inputs: `stdin`, `files` (object), `file:<path>` (individual files)
+  - Outputs: `output`, `stdout`, `stderr`, `exit_code`, `success`, `duration_ms`
+
+### Docker
+
+- **`docker.run`** — Run Docker containers with full configuration
+  - Config: `image`, `command`, `entrypoint`, `env`, `volumes`, `workdir`, `user`, `network`, `cpu_limit`, `memory_limit`, `stdin_mode`, `output_mode`, `io_mode`, `auto_pull`, `detached`, `remove`, `timeout`
+  - I/O modes: `flat` (plain values), `wrapped` (Value enum), `auto`
+  - Inputs: `data` (stdin)
+  - Outputs: `output`, `stdout`, `stderr`, `exit_code`, `success`
+
+### HTTP
+
+- **`http.request`** — Make HTTP requests
+  - Config: `method` (GET/POST/PUT/DELETE), `headers`
+  - Inputs: `url`, `body` (optional)
+  - Outputs: `status`, `body`, `headers`
+
+### Transform
+
+- **`transform.json_parse`** — Parse JSON strings
+  - Inputs: `json` (string)
+  - Outputs: `parsed` (JSON value)
+
+- **`transform.json_stringify`** — Convert values to JSON
+  - Inputs: `value` (any)
+  - Outputs: `json` (string)
+
+### Utility
+
+- **`time.delay`** — Delay execution (passthrough inputs)
+  - Config: `delay_ms`
+
+- **`debug.log`** — Log values for debugging
+  - Inputs: `message` (any)
+  - Outputs: `message` (passthrough)
+
+## Retry Policies
+
+Every node supports exponential backoff retry:
+
+```json
+{
+  "retry_policy": {
+    "max_attempts": 5,
+    "delay_ms": 1000,
+    "backoff_multiplier": 2.0,
+    "max_delay_ms": 60000,
+    "retry_on_timeout": true
+  }
+}
+```
+
+Delays: 1s → 2s → 4s → 8s → 16s (capped at 60s max).
+
+## Streaming Events
+
+Nodes emit real-time events streamed to CLI, WebSocket, or programmatic subscribers:
+
+```rust
+let mut events = runtime.subscribe_events();
+
+while let Ok(event) = events.recv().await {
+    match event {
+        ExecutionEvent::NodeStarted { node_id, node_type, .. } => { }
+        ExecutionEvent::NodeCompleted { node_id, duration_ms, .. } => { }
+        ExecutionEvent::NodeFailed { node_id, error, .. } => { }
+        ExecutionEvent::NodeEvent { event, .. } => match event {
+            NodeEvent::Info { message } => { }
+            NodeEvent::Warning { message } => { }
+            NodeEvent::Progress { percent, message } => { }
+            NodeEvent::StdoutLine { line } => { }    // streaming!
+            NodeEvent::StderrLine { line } => { }    // streaming!
+            _ => { }
+        }
+        _ => { }
+    }
+}
+```
+
+## Persistence & Caching
+
+```rust
+use flowpersist::PersistentStore;
+
+let store = PersistentStore::open("flowengine.db")?;
+
+// Save a workflow
+store.save_workflow(&workflow)?;
+
+// Load it back
+let wf = store.load_workflow(id)?;
+
+// Record execution history
+store.record_execution(&ExecutionRecord { ... })?;
+
+// Cache node results with content fingerprint
+let config_hash = PersistentStore::compute_hash(&config);
+let input_hash = PersistentStore::compute_hash(&inputs);
+store.cache_result("shell.exec", &config_hash, &input_hash, &outputs, Some(3600))?;
+
+// Check cache before re-executing
+if let Some(cached) = store.get_cached_result("shell.exec", &config_hash, &input_hash)? {
+    return Ok(cached); // cache hit!
 }
 ```
 
@@ -125,30 +315,24 @@ Workflows are defined as JSON files:
 use async_trait::async_trait;
 use flowcore::{Node, NodeContext, NodeError, NodeOutput, Value};
 
-pub struct MyCustomNode {
-    // Node state
-}
+pub struct MyCustomNode;
 
 #[async_trait]
 impl Node for MyCustomNode {
-    fn node_type(&self) -> &str {
-        "custom.my_node"
-    }
-    
+    fn node_type(&self) -> &str { "custom.my_node" }
+
     async fn execute(&self, ctx: NodeContext) -> Result<NodeOutput, NodeError> {
-        // Get inputs
         let input = ctx.require_input("data")?;
-        
-        // Emit progress events
-        ctx.events.info("Processing data...");
-        ctx.events.progress(50.0, Some("Halfway done".to_string()));
-        
-        // Do work
-        let result = process_data(input)?;
-        
-        // Return outputs
+
+        ctx.events.info("Processing...");
+        ctx.events.progress(50.0, Some("Halfway".to_string()));
+
+        // Stream output to subscribers
+        ctx.events.stdout_line("processing item 1");
+        ctx.events.stdout_line("processing item 2");
+
         Ok(NodeOutput::new()
-            .with_output("result", result))
+            .with_output("result", "done"))
     }
 }
 ```
@@ -156,115 +340,50 @@ impl Node for MyCustomNode {
 ### 2. Create a Factory
 
 ```rust
-use flowruntime::{NodeFactory, NodeMetadata};
+use flowruntime::{NodeFactory, NodeMetadata, PortDefinition};
 
 pub struct MyCustomNodeFactory;
 
 impl NodeFactory for MyCustomNodeFactory {
-    fn create(&self, config: &HashMap<String, Value>) -> Result<Box<dyn Node>, NodeError> {
-        Ok(Box::new(MyCustomNode::new(config)?))
+    fn create(&self, _config: &HashMap<String, Value>) -> Result<Box<dyn Node>, NodeError> {
+        Ok(Box::new(MyCustomNode))
     }
-    
-    fn node_type(&self) -> &str {
-        "custom.my_node"
-    }
-    
+
+    fn node_type(&self) -> &str { "custom.my_node" }
+
     fn metadata(&self) -> NodeMetadata {
         NodeMetadata {
-            description: "Does custom processing".to_string(),
+            description: "My custom node".to_string(),
             category: "custom".to_string(),
-            inputs: vec![
-                PortDefinition {
-                    name: "data".to_string(),
-                    description: "Input data".to_string(),
-                    required: true,
-                }
-            ],
-            outputs: vec![
-                PortDefinition {
-                    name: "result".to_string(),
-                    description: "Processed result".to_string(),
-                    required: false,
-                }
-            ],
+            inputs: vec![PortDefinition {
+                name: "data".to_string(),
+                description: "Input data".to_string(),
+                required: true,
+            }],
+            outputs: vec![PortDefinition {
+                name: "result".to_string(),
+                description: "Processed result".to_string(),
+                required: false,
+            }],
         }
     }
 }
 ```
 
-### 3. Register the Node
+### 3. Register
 
 ```rust
-let mut registry = NodeRegistry::new();
 registry.register(Arc::new(MyCustomNodeFactory));
-```
-
-## Built-in Nodes
-
-### HTTP Nodes
-
-- **`http.request`** - Make HTTP requests
-  - Config: `method` (GET/POST/PUT/DELETE)
-  - Inputs: `url`, `body` (optional), `headers` (optional)
-  - Outputs: `status`, `body`, `headers`
-
-### Transform Nodes
-
-- **`transform.json_parse`** - Parse JSON strings
-  - Inputs: `json` (string)
-  - Outputs: `parsed` (JSON value)
-
-- **`transform.json_stringify`** - Convert values to JSON
-  - Inputs: `value` (any)
-  - Outputs: `json` (string)
-
-### Time Nodes
-
-- **`time.delay`** - Delay execution
-  - Config: `delay_ms` (number)
-  - Inputs: any (passed through)
-  - Outputs: same as inputs
-
-### Debug Nodes
-
-- **`debug.log`** - Log values
-  - Inputs: `message` (any)
-  - Outputs: `message` (passthrough)
-
-## Real-Time Event Streaming
-
-Subscribe to workflow execution events:
-
-```rust
-let runtime = FlowRuntime::new();
-let mut events = runtime.subscribe_events();
-
-tokio::spawn(async move {
-    while let Ok(event) = events.recv().await {
-        match event {
-            ExecutionEvent::NodeStarted { node_id, .. } => {
-                println!("Node {} started", node_id);
-            }
-            ExecutionEvent::NodeCompleted { node_id, duration_ms, .. } => {
-                println!("Node {} completed in {}ms", node_id, duration_ms);
-            }
-            ExecutionEvent::NodeEvent { event, .. } => {
-                // Handle node-specific events (info, warnings, progress)
-            }
-            _ => {}
-        }
-    }
-});
 ```
 
 ## CLI Commands
 
 ```bash
 # Run a workflow
-flow run --file workflow.json --input '{"key": "value"}'
+flow run --file workflow.json --input '{"key": "value"}' --verbose
 
-# Validate workflow syntax
-flow validate --file workflow.json
+# Validate workflow
+flow validate workflow.json
 
 # List available node types
 flow nodes
@@ -278,19 +397,23 @@ flow init --output my_workflow.json
 - [x] Core execution engine
 - [x] Event-driven architecture
 - [x] Standard node library
+- [x] Shell & process execution with streaming
+- [x] Zypi Firecracker microVM integration
+- [x] Exponential backoff retry policies
 - [x] CLI interface
 - [x] HTTP/WebSocket API server
+- [x] Python SDK (`@task`, `Flow`, `Sandbox`)
+- [x] SQLite persistence & result caching
 - [ ] Bevy-based visual editor
-- [ ] Workflow persistence (SQLite)
 - [ ] Scheduling & triggers (cron, webhooks)
 - [ ] Distributed execution
 - [ ] WASM plugin support
-- [ ] Streaming data support
-- [ ] Process-based node isolation
 - [ ] Monitoring dashboard
+- [ ] Prefect-compatible API layer
 
 ## Performance
 
+- **448ms** — 3-node shell pipeline (curl → python → debug)
 - Async/await throughout (Tokio runtime)
 - Parallel node execution with configurable limits
 - Zero-copy value passing where possible
@@ -298,13 +421,13 @@ flow init --output my_workflow.json
 
 ## Contributing
 
-Contributions welcome! Areas of interest:
+Contributions welcome! Priority areas:
 
-1. **New Nodes** - Add common integrations (databases, APIs, file systems)
-2. **Error Handling** - Improve retry logic and error recovery
-3. **Testing** - Add integration tests and benchmarks
-4. **Documentation** - Improve examples and guides
-5. **Bevy UI** - Help build the visual editor
+1. **New Nodes** — Databases, message queues, file systems, cloud APIs
+2. **Bevy UI** — Visual workflow editor
+3. **Scheduling** — Cron triggers, webhooks
+4. **Distributed** — Multi-node execution, work stealing
+5. **Documentation** — Guides, tutorials, video demos
 
 ## License
 
@@ -313,7 +436,8 @@ MIT OR Apache-2.0
 ## Acknowledgments
 
 Inspired by:
-- **n8n** - Node-based automation
-- **Apache Airflow** - Workflow orchestration
-- **Pure Data** - Visual dataflow programming
-- **Bevy** - ECS architecture
+- **Prefect** — Python workflow orchestration
+- **n8n** — Node-based automation
+- **Apache Airflow** — DAG scheduling
+- **Firecracker** — MicroVM sandboxing
+- **Bevy** — ECS architecture
