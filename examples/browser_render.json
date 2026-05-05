@@ -1,0 +1,48 @@
+{
+  "id": "a1b2c3d4-e5f6-4890-abcd-ef1234567006",
+  "name": "Browser Render Demo",
+  "description": "Renders HTML in headless Chromium inside a Firecracker sandbox",
+  "nodes": [
+    {
+      "id": "a1b2c3d4-e5f6-4890-abcd-ef1234567601",
+      "node_type": "browser.render",
+      "name": "Render Page",
+      "config": {
+        "zypi_url": {"type": "String", "value": "http://localhost:4000"},
+        "image": {"type": "String", "value": "ubuntu:24.04"},
+        "url": {"type": "String", "value": "https://example.com"},
+        "mode": {"type": "String", "value": "text"},
+        "wait_ms": {"type": "Number", "value": 2000},
+        "memory_mb": {"type": "Number", "value": 512},
+        "timeout": {"type": "Number", "value": 30}
+      },
+      "retry_policy": {
+        "max_attempts": 2,
+        "delay_ms": 1000,
+        "backoff_multiplier": 2.0,
+        "max_delay_ms": 10000,
+        "retry_on_timeout": true
+      }
+    },
+    {
+      "id": "a1b2c3d4-e5f6-4890-abcd-ef1234567602",
+      "node_type": "debug.log",
+      "name": "Show Rendered Text",
+      "config": {}
+    }
+  ],
+  "connections": [
+    {
+      "from_node": "a1b2c3d4-e5f6-4890-abcd-ef1234567601",
+      "from_port": "stdout",
+      "to_node": "a1b2c3d4-e5f6-4890-abcd-ef1234567602",
+      "to_port": "message"
+    }
+  ],
+  "triggers": [],
+  "settings": {
+    "max_execution_time_ms": 60000,
+    "max_parallel_nodes": 5,
+    "on_error": "StopWorkflow"
+  }
+}

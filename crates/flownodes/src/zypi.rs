@@ -51,6 +51,8 @@ struct ZypiConfig {
     env: HashMap<String, String>,
     workdir: Option<String>,
     timeout_seconds: Option<u64>,
+    memory_mb: Option<u64>,
+    vcpus: Option<u64>,
 }
 
 impl ZypiConfig {
@@ -126,6 +128,18 @@ impl ZypiConfig {
                     .map(String::from)
             });
 
+        let memory_mb = ctx
+            .config
+            .get("memory_mb")
+            .and_then(|v| v.as_f64())
+            .map(|f| f as u64);
+
+        let vcpus = ctx
+            .config
+            .get("vcpus")
+            .and_then(|v| v.as_f64())
+            .map(|f| f as u64);
+
         Ok(Self {
             url,
             image,
@@ -134,6 +148,8 @@ impl ZypiConfig {
             env,
             workdir,
             timeout_seconds,
+            memory_mb,
+            vcpus,
         })
     }
 }
@@ -199,6 +215,20 @@ impl Node for ZypiExecNode {
             payload.insert(
                 "workdir".to_string(),
                 serde_json::Value::String(wd.clone()),
+            );
+        }
+
+        if let Some(mem) = config.memory_mb {
+            payload.insert(
+                "memory_mb".to_string(),
+                serde_json::Value::Number(serde_json::Number::from(mem)),
+            );
+        }
+
+        if let Some(cpu) = config.vcpus {
+            payload.insert(
+                "vcpus".to_string(),
+                serde_json::Value::Number(serde_json::Number::from(cpu)),
             );
         }
 

@@ -2,6 +2,7 @@
 //! 
 //! Collection of built-in nodes for common operations
 
+mod browser;
 mod debug;
 mod docker;
 mod docker_v2;
@@ -11,6 +12,7 @@ mod time;
 mod transform;
 mod zypi;
 
+pub use browser::BrowserRenderNode;
 pub use debug::DebugNode;
 pub use docker::{DockerNode, DockerNodeFactory};
 pub use docker_v2::{DockerNodeV2, DockerNodeV2Factory};
@@ -25,6 +27,7 @@ use std::sync::Arc;
 
 /// Register all standard nodes with a registry
 pub fn register_all(registry: &mut NodeRegistry) {
+    registry.register(Arc::new(browser::BrowserRenderNodeFactory));
     registry.register(Arc::new(debug::DebugNodeFactory));
     registry.register(Arc::new(docker::DockerNodeFactory));
     registry.register(Arc::new(docker_v2::DockerNodeV2Factory));
