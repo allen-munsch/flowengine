@@ -10,7 +10,11 @@
       "config": {
         "url": {"type": "String", "value": "http://localhost:4000"},
         "image": {"type": "String", "value": "ubuntu:24.04"},
-        "command": {"type": "String", "value": "python3 -c \"import sys, json; data=json.loads(sys.stdin.read() if not sys.stdin.isatty() else '{}'); result={'squared': data.get('value', 0) ** 2, 'length': len(data.get('text', ''))}; print(json.dumps(result))\""},
+        "command": {"type": "Array", "value": [
+          {"type": "String", "value": "/usr/bin/python3"},
+          {"type": "String", "value": "-c"},
+          {"type": "String", "value": "import os, json; v=int(os.environ.get('VALUE',0)); t=os.environ.get('TEXT',''); print(json.dumps({'squared': v**2, 'length': len(t)}))"}
+        ]},
         "timeout": {"type": "Number", "value": 30}
       },
       "retry_policy": {

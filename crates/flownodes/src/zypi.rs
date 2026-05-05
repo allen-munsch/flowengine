@@ -146,9 +146,20 @@ impl Node for ZypiExecNode {
             serde_json::Value::String(config.image.clone()),
         );
 
-        if !config.env.is_empty() {
-            let env_map: serde_json::Map<String, serde_json::Value> = config
-                .env
+        // Merge config env with workflow inputs (passed as env vars)
+        let mut env = config.env.clone();
+        for (key, value) in &ctx.inputs {
+            let env_key = key.to_uppercase();
+            match value {
+                Value::String(s) => { env.insert(env_key, s.clone()); }
+                Value::Number(n) => { env.insert(env_key, n.to_string()); }
+                Value::Bool(b) => { env.insert(env_key, b.to_string()); }
+                _ => {}
+            }
+        }
+
+        if !env.is_empty() {
+            let env_map: serde_json::Map<String, serde_json::Value> = env
                 .iter()
                 .map(|(k, v)| {
                     (k.clone(), serde_json::Value::String(v.clone()))
