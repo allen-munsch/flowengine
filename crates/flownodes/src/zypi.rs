@@ -275,6 +275,10 @@ impl Node for ZypiExecNode {
         }
 
         let timeout = config.timeout_seconds.unwrap_or(300);
+        payload.insert(
+            "timeout".to_string(),
+            serde_json::Value::Number(serde_json::Number::from(timeout)),
+        );
 
         // Route to session exec or one-shot exec based on session_id presence
         let (endpoint, log_msg) = if let Some(ref sid) = config.session_id {
