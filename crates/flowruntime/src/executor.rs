@@ -181,12 +181,49 @@ impl WorkflowExecutor {
                     timestamp: Utc::now(),
                 });
                 
-                // Spawn execution task
+                // Get retry policy from node spec
+                let retry_policy = node_spec.retry_policy.clone();
+
+                // Spawn execution task with retry
                 let task = async move {
-                    let start = Instant::now();
-                    let result = node.execute(ctx).await;
-                    let duration_ms = start.elapsed().as_millis() as u64;
-                    (node_id, result, duration_ms)
+                    let mut last_error = None;
+                    let max_attempts = retry_policy.as_ref()
+                        .map(|r| r.max_attempts)
+                        .unwrap_or(1);
+
+                    for attempt in 0..max_attempts {
+                        if attempt > 0 {
+                            let delay_ms = retry_policy.as_ref()
+                                .map(|r| r.delay_for_attempt(attempt))
+                                .unwrap_or(1000);
+                            tracing::warn!(
+                                "Retrying node {} (attempt {}/{}) after {}ms",
+                                node_id, attempt + 1, max_attempts, delay_ms
+                            );
+                            tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+                        }
+
+                        let start = Instant::now();
+                        let result = node.execute(ctx.clone()).await;
+                        let duration_ms = start.elapsed().as_millis() as u64;
+
+                        match result {
+                            Ok(output) => return (node_id, Ok(output), duration_ms),
+                            Err(e) => {
+                                let is_timeout = matches!(e, flowcore::NodeError::Timeout { .. });
+                                let retry_on_timeout = retry_policy.as_ref()
+                                    .map(|r| r.retry_on_timeout)
+                                    .unwrap_or(true);
+
+                                if is_timeout && !retry_on_timeout {
+                                    return (node_id, Err(e), duration_ms);
+                                }
+                                last_error = Some(e);
+                            }
+                        }
+                    }
+
+                    (node_id, Err(last_error.unwrap()), 0)
                 };
                 
                 // Apply timeout if specified

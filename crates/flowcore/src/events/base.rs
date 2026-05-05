@@ -56,6 +56,8 @@ pub enum NodeEvent {
     Warning { message: String },
     Progress { percent: f64, message: Option<String> },
     Data { port: String, value: Value },
+    StdoutLine { line: String },
+    StderrLine { line: String },
 }
 
 /// Event emitter for nodes to send real-time updates
@@ -113,6 +115,20 @@ impl EventEmitter {
         self.emit(NodeEvent::Data {
             port: port.into(),
             value,
+        });
+    }
+
+    /// Emit a stdout line (for streaming process output)
+    pub fn stdout_line(&self, line: impl Into<String>) {
+        self.emit(NodeEvent::StdoutLine {
+            line: line.into(),
+        });
+    }
+
+    /// Emit a stderr line (for streaming process output)
+    pub fn stderr_line(&self, line: impl Into<String>) {
+        self.emit(NodeEvent::StderrLine {
+            line: line.into(),
         });
     }
 }

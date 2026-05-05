@@ -184,6 +184,12 @@ async fn run_workflow(file: PathBuf, input: Option<String>) -> Result<()> {
                                 println!("     📊 [{}] {}%", node_id, percent);
                             }
                         }
+                        flowcore::NodeEvent::StdoutLine { line } => {
+                            println!("     📤 [{}] {}", node_id, line);
+                        }
+                        flowcore::NodeEvent::StderrLine { line } => {
+                            eprintln!("     📤 [{}] {}", node_id, line);
+                        }
                         _ => {}
                     }
                 }
