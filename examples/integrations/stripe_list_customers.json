@@ -1,0 +1,70 @@
+{
+  "id": "19efb6af-348c-4ede-b098-d9181c96ae31",
+  "name": "Stripe \u2014 List Customers",
+  "description": "Lists recent Stripe customers",
+  "nodes": [
+    {
+      "id": "1b7f91c3-d0ba-496e-ab2a-87932385c95d",
+      "node_type": "api.call",
+      "name": "Stripe \u2014 List Customers",
+      "config": {
+        "zypi_url": {
+          "type": "String",
+          "value": "http://localhost:4000"
+        },
+        "image": {
+          "type": "String",
+          "value": "ubuntu:24.04"
+        },
+        "packages": {
+          "type": "Array",
+          "value": [
+            {
+              "type": "String",
+              "value": "stripe"
+            }
+          ]
+        },
+        "script": {
+          "type": "String",
+          "value": "import os, json\nimport stripe\n\nstripe.api_key = os.environ.get('STRIPE_KEY', '')\ncustomers = stripe.Customer.list(limit=10)\n\nresult = []\nfor c in customers.auto_paging_iter():\n    result.append({\n        'id': c['id'],\n        'email': c.get('email', ''),\n        'name': c.get('name', ''),\n        'created': str(c.get('created', ''))\n    })\n\nprint(json.dumps({'count': len(result), 'customers': result}))"
+        },
+        "timeout": {
+          "type": "Number",
+          "value": 30
+        },
+        "memory_mb": {
+          "type": "Number",
+          "value": 256
+        }
+      },
+      "retry_policy": {
+        "max_attempts": 3,
+        "delay_ms": 1000,
+        "backoff_multiplier": 2.0,
+        "max_delay_ms": 10000,
+        "retry_on_timeout": true
+      }
+    },
+    {
+      "id": "01b8a36c-8267-4232-8f3a-f6f1caa32d45",
+      "node_type": "debug.log",
+      "name": "Output",
+      "config": {}
+    }
+  ],
+  "connections": [
+    {
+      "from_node": "1b7f91c3-d0ba-496e-ab2a-87932385c95d",
+      "from_port": "output",
+      "to_node": "01b8a36c-8267-4232-8f3a-f6f1caa32d45",
+      "to_port": "message"
+    }
+  ],
+  "triggers": [],
+  "settings": {
+    "max_execution_time_ms": 120000,
+    "max_parallel_nodes": 10,
+    "on_error": "StopWorkflow"
+  }
+}

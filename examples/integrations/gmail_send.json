@@ -1,0 +1,74 @@
+{
+  "id": "dac4ee6d-f0bc-43cd-b7d3-fc09e6055023",
+  "name": "Gmail \u2014 Send Email",
+  "description": "Sends an email via Gmail API using google-api-python-client",
+  "nodes": [
+    {
+      "id": "706ddfb8-50ad-4186-8d70-e63fe1de727b",
+      "node_type": "api.call",
+      "name": "Gmail \u2014 Send Email",
+      "config": {
+        "zypi_url": {
+          "type": "String",
+          "value": "http://localhost:4000"
+        },
+        "image": {
+          "type": "String",
+          "value": "ubuntu:24.04"
+        },
+        "packages": {
+          "type": "Array",
+          "value": [
+            {
+              "type": "String",
+              "value": "google-api-python-client"
+            },
+            {
+              "type": "String",
+              "value": "google-auth-oauthlib"
+            }
+          ]
+        },
+        "script": {
+          "type": "String",
+          "value": "import os, json, base64\nfrom email.mime.text import MIMEText\nfrom google.oauth2.credentials import Credentials\nfrom googleapiclient.discovery import build\n\n# Credentials from env (OAuth2 refresh token flow)\ntoken_json = os.environ.get('GMAIL_TOKEN', '{}')\ncreds = Credentials.from_authorized_user_info(json.loads(token_json))\n\nservice = build('gmail', 'v1', credentials=creds)\n\nto = os.environ.get('TO', '')\nsubject = os.environ.get('SUBJECT', 'FlowEngine Notification')\nbody = os.environ.get('BODY', 'Sent from FlowEngine sandbox.')\n\nmessage = MIMEText(body)\nmessage['to'] = to\nmessage['subject'] = subject\nraw = base64.urlsafe_b64encode(message.as_bytes()).decode()\n\nresult = service.users().messages().send(userId='me', body={'raw': raw}).execute()\nprint(json.dumps({'sent': True, 'message_id': result['id']}))"
+        },
+        "timeout": {
+          "type": "Number",
+          "value": 30
+        },
+        "memory_mb": {
+          "type": "Number",
+          "value": 384
+        }
+      },
+      "retry_policy": {
+        "max_attempts": 3,
+        "delay_ms": 1000,
+        "backoff_multiplier": 2.0,
+        "max_delay_ms": 10000,
+        "retry_on_timeout": true
+      }
+    },
+    {
+      "id": "502ab732-dad7-47ff-9d0c-ff01705808d5",
+      "node_type": "debug.log",
+      "name": "Output",
+      "config": {}
+    }
+  ],
+  "connections": [
+    {
+      "from_node": "706ddfb8-50ad-4186-8d70-e63fe1de727b",
+      "from_port": "output",
+      "to_node": "502ab732-dad7-47ff-9d0c-ff01705808d5",
+      "to_port": "message"
+    }
+  ],
+  "triggers": [],
+  "settings": {
+    "max_execution_time_ms": 120000,
+    "max_parallel_nodes": 10,
+    "on_error": "StopWorkflow"
+  }
+}

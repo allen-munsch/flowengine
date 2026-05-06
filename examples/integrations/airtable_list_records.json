@@ -1,0 +1,70 @@
+{
+  "id": "f068dcbb-0f4d-4a47-b085-c97334e76be7",
+  "name": "Airtable \u2014 List Records",
+  "description": "Lists records from an Airtable base",
+  "nodes": [
+    {
+      "id": "c231541d-c9a1-459c-a5b2-4792aeeb4216",
+      "node_type": "api.call",
+      "name": "Airtable \u2014 List Records",
+      "config": {
+        "zypi_url": {
+          "type": "String",
+          "value": "http://localhost:4000"
+        },
+        "image": {
+          "type": "String",
+          "value": "ubuntu:24.04"
+        },
+        "packages": {
+          "type": "Array",
+          "value": [
+            {
+              "type": "String",
+              "value": "pyairtable"
+            }
+          ]
+        },
+        "script": {
+          "type": "String",
+          "value": "import os, json\nfrom pyairtable import Api\n\ntoken = os.environ.get('AIRTABLE_TOKEN', '')\nbase_id = os.environ.get('BASE_ID', '')\ntable_name = os.environ.get('TABLE', 'Table 1')\n\napi = Api(token)\ntable = api.table(base_id, table_name)\nrecords = table.all(max_records=20)\n\nresult = []\nfor r in records:\n    result.append({'id': r['id'], 'fields': r['fields'], 'created': r.get('createdTime', '')})\n\nprint(json.dumps({'table': table_name, 'count': len(result), 'records': result}))"
+        },
+        "timeout": {
+          "type": "Number",
+          "value": 30
+        },
+        "memory_mb": {
+          "type": "Number",
+          "value": 256
+        }
+      },
+      "retry_policy": {
+        "max_attempts": 3,
+        "delay_ms": 1000,
+        "backoff_multiplier": 2.0,
+        "max_delay_ms": 10000,
+        "retry_on_timeout": true
+      }
+    },
+    {
+      "id": "1b5d394a-5a6e-41f9-9ea6-f1bea23b5b00",
+      "node_type": "debug.log",
+      "name": "Output",
+      "config": {}
+    }
+  ],
+  "connections": [
+    {
+      "from_node": "c231541d-c9a1-459c-a5b2-4792aeeb4216",
+      "from_port": "output",
+      "to_node": "1b5d394a-5a6e-41f9-9ea6-f1bea23b5b00",
+      "to_port": "message"
+    }
+  ],
+  "triggers": [],
+  "settings": {
+    "max_execution_time_ms": 120000,
+    "max_parallel_nodes": 10,
+    "on_error": "StopWorkflow"
+  }
+}
