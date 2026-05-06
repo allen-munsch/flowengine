@@ -1,6 +1,6 @@
 use actix_cors::Cors;
 use actix_web::{
-    get, post, web, App, HttpResponse, HttpServer, Responder, Result as ActixResult,
+    delete, get, post, web, App, HttpResponse, HttpServer, Responder, Result as ActixResult,
 };
 use actix_ws::Message;
 use flowcore::{Value, Workflow, WorkflowId};
@@ -10,6 +10,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{error, info};
+use utoipa::{OpenApi, ToSchema};
+use utoipa_swagger_ui::SwaggerUi;
 use uuid::Uuid;
 
 /// Application state shared across handlers
@@ -19,33 +21,65 @@ struct AppState {
 }
 
 /// Request body for workflow execution
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 struct ExecuteRequest {
+    /// Input values keyed by port name (e.g., {"url": "https://api.github.com/zen"})
     inputs: HashMap<String, serde_json::Value>,
 }
 
 /// Response for workflow creation
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 struct WorkflowResponse {
+    /// UUID of the created workflow
     id: Uuid,
+    /// Human-readable confirmation
+    #[schema(example = "Workflow created successfully")]
     message: String,
 }
 
 /// Response for workflow execution
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 struct ExecutionResponse {
+    /// UUID of this execution run
     execution_id: Uuid,
+    /// Number of nodes that completed successfully
+    #[schema(example = 2)]
     completed_nodes: usize,
+    /// Total nodes in the workflow
+    #[schema(example = 2)]
     total_nodes: usize,
 }
 
-/// Error response
-#[derive(Debug, Serialize)]
+/// Error response for any 4xx/5xx
+#[derive(Debug, Serialize, ToSchema)]
 struct ErrorResponse {
+    /// Human-readable error description
+    #[schema(example = "Workflow not found")]
     error: String,
 }
 
-/// Health check endpoint
+/// Summary of a registered node type
+#[derive(Debug, Serialize, ToSchema)]
+struct NodeTypeInfo {
+    /// Node type identifier (e.g., "zypi.exec", "shell.exec")
+    #[schema(example = "zypi.exec")]
+    r#type: String,
+    /// Human-readable description
+    #[schema(example = "Execute command in Firecracker microVM")]
+    description: String,
+    /// Category for grouping (e.g., "zypi", "shell", "docker")
+    #[schema(example = "zypi")]
+    category: String,
+}
+
+/// Health check — returns service status
+#[utoipa::path(
+    get,
+    path = "/health",
+    responses(
+        (status = 200, description = "Service is healthy", body = serde_json::Value)
+    )
+)]
 #[get("/health")]
 async fn health_check() -> impl Responder {
     HttpResponse::Ok().json(serde_json::json!({
@@ -55,7 +89,14 @@ async fn health_check() -> impl Responder {
     }))
 }
 
-/// List all workflows
+/// List all registered workflows (summary only — no full definitions)
+#[utoipa::path(
+    get,
+    path = "/api/workflows",
+    responses(
+        (status = 200, description = "List of workflow summaries", body = Vec<serde_json::Value>)
+    )
+)]
 #[get("/api/workflows")]
 async fn list_workflows(data: web::Data<AppState>) -> ActixResult<impl Responder> {
     let workflows = data.workflows.read().await;
@@ -75,7 +116,16 @@ async fn list_workflows(data: web::Data<AppState>) -> ActixResult<impl Responder
     Ok(HttpResponse::Ok().json(workflow_list))
 }
 
-/// Create a new workflow
+/// Create a new workflow from a FlowEngine workflow definition
+#[utoipa::path(
+    post,
+    path = "/api/workflows",
+    request_body = serde_json::Value,
+    responses(
+        (status = 201, description = "Workflow created", body = WorkflowResponse),
+        (status = 400, description = "Invalid workflow JSON", body = ErrorResponse)
+    )
+)]
 #[post("/api/workflows")]
 async fn create_workflow(
     data: web::Data<AppState>,
@@ -86,10 +136,8 @@ async fn create_workflow(
 
     info!("Creating workflow: {} ({})", workflow.name, workflow_id);
 
-    // Store in memory
     data.workflows.write().await.insert(workflow_id, workflow);
 
-    // Also register with runtime
     if let Some(workflow) = data.workflows.read().await.get(&workflow_id) {
         data.runtime.register_workflow(workflow.clone()).await;
     }
@@ -100,7 +148,18 @@ async fn create_workflow(
     }))
 }
 
-/// Get a specific workflow
+/// Get a specific workflow by ID (full definition including nodes and connections)
+#[utoipa::path(
+    get,
+    path = "/api/workflows/{id}",
+    params(
+        ("id" = Uuid, description = "Workflow UUID")
+    ),
+    responses(
+        (status = 200, description = "Workflow definition", body = serde_json::Value),
+        (status = 404, description = "Workflow not found", body = ErrorResponse)
+    )
+)]
 #[get("/api/workflows/{id}")]
 async fn get_workflow(
     data: web::Data<AppState>,
@@ -117,8 +176,19 @@ async fn get_workflow(
     }
 }
 
-/// Delete a workflow
-#[actix_web::delete("/api/workflows/{id}")]
+/// Delete a workflow by ID
+#[utoipa::path(
+    delete,
+    path = "/api/workflows/{id}",
+    params(
+        ("id" = Uuid, description = "Workflow UUID")
+    ),
+    responses(
+        (status = 200, description = "Workflow deleted", body = serde_json::Value),
+        (status = 404, description = "Workflow not found", body = ErrorResponse)
+    )
+)]
+#[delete("/api/workflows/{id}")]
 async fn delete_workflow(
     data: web::Data<AppState>,
     path: web::Path<Uuid>,
@@ -139,7 +209,20 @@ async fn delete_workflow(
     }
 }
 
-/// Execute a workflow
+/// Execute a previously created workflow with inputs
+#[utoipa::path(
+    post,
+    path = "/api/workflows/{id}/execute",
+    params(
+        ("id" = Uuid, description = "Workflow UUID")
+    ),
+    request_body = ExecuteRequest,
+    responses(
+        (status = 200, description = "Workflow executed successfully", body = ExecutionResponse),
+        (status = 404, description = "Workflow not found", body = ErrorResponse),
+        (status = 500, description = "Execution failed", body = ErrorResponse)
+    )
+)]
 #[post("/api/workflows/{id}/execute")]
 async fn execute_workflow(
     data: web::Data<AppState>,
@@ -178,7 +261,8 @@ async fn execute_workflow(
     }
 }
 
-/// WebSocket endpoint for real-time events
+/// WebSocket endpoint for real-time execution events.
+/// NOTE: not included in OpenAPI spec (WebSocket not modeled by OpenAPI 3.x).
 #[get("/api/events")]
 async fn websocket_events(
     req: actix_web::HttpRequest,
@@ -189,18 +273,14 @@ async fn websocket_events(
 
     info!("WebSocket client connected");
 
-    // Subscribe to events
     let mut events = data.runtime.subscribe_events();
 
-    // Spawn task to handle WebSocket
     actix_web::rt::spawn(async move {
         loop {
             tokio::select! {
-                // Receive event from runtime
                 event = events.recv() => {
                     match event {
                         Ok(event) => {
-                            // Serialize and send event
                             if let Ok(json) = serde_json::to_string(&event) {
                                 if session.text(json).await.is_err() {
                                     break;
@@ -211,7 +291,6 @@ async fn websocket_events(
                     }
                 }
 
-                // Handle incoming WebSocket messages (ping/pong)
                 Some(Ok(msg)) = msg_stream.recv() => {
                     match msg {
                         Message::Ping(bytes) => {
@@ -235,37 +314,78 @@ async fn websocket_events(
     Ok(res)
 }
 
-/// List available node types
+/// List all available node types that can be used in workflow definitions
+#[utoipa::path(
+    get,
+    path = "/api/nodes",
+    responses(
+        (status = 200, description = "List of available node types", body = Vec<NodeTypeInfo>)
+    )
+)]
 #[get("/api/nodes")]
 async fn list_node_types(data: web::Data<AppState>) -> ActixResult<impl Responder> {
     let registry = data.runtime.registry();
     let node_types = registry.list_node_types();
 
-    let nodes: Vec<_> = node_types
+    let nodes: Vec<NodeTypeInfo> = node_types
         .iter()
         .map(|node_type| {
             let metadata = registry.get_metadata(node_type);
-            serde_json::json!({
-                "type": node_type,
-                "description": metadata.as_ref().map(|m| m.description.clone()).unwrap_or_default(),
-                "category": metadata.as_ref().map(|m| m.category.clone()).unwrap_or_default(),
-            })
+            NodeTypeInfo {
+                r#type: node_type.clone(),
+                description: metadata.as_ref().map(|m| m.description.clone()).unwrap_or_default(),
+                category: metadata.as_ref().map(|m| m.category.clone()).unwrap_or_default(),
+            }
         })
         .collect();
 
     Ok(HttpResponse::Ok().json(nodes))
 }
 
+/// OpenAPI spec — generated at compile time from utoipa annotations
+#[derive(OpenApi)]
+#[openapi(
+    paths(
+        health_check,
+        list_workflows,
+        create_workflow,
+        get_workflow,
+        delete_workflow,
+        execute_workflow,
+        list_node_types,
+    ),
+    components(
+        schemas(
+            ExecuteRequest,
+            WorkflowResponse,
+            ExecutionResponse,
+            ErrorResponse,
+            NodeTypeInfo,
+        )
+    ),
+    info(
+        title = "FlowEngine API",
+        version = env!("CARGO_PKG_VERSION"),
+        description = "Event-driven DAG workflow engine with Firecracker microVM sandboxing. Supports shell.exec, zypi.exec, browser.render, docker.run, http.request, and transform nodes."
+    ),
+    servers(
+        (url = "http://localhost:3000", description = "Local development"),
+    ),
+    tags(
+        (name = "workflows", description = "Workflow CRUD and execution"),
+        (name = "nodes", description = "Node type discovery"),
+    )
+)]
+struct ApiDoc;
+
 #[actix_web::main]
 async fn main() -> anyhow::Result<()> {
-    // Initialize logging
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::INFO)
         .init();
 
     info!("🚀 Starting Flow Engine Server");
 
-    // Create runtime with registered nodes
     let mut registry = flowruntime::NodeRegistry::new();
     flownodes::register_all(&mut registry);
 
@@ -276,7 +396,6 @@ async fn main() -> anyhow::Result<()> {
 
     info!("✅ Runtime initialized with standard nodes");
 
-    // Create app state
     let app_state = web::Data::new(AppState {
         runtime: Arc::new(runtime),
         workflows: Arc::new(RwLock::new(HashMap::new())),
@@ -285,8 +404,9 @@ async fn main() -> anyhow::Result<()> {
     let bind_address = std::env::var("BIND_ADDRESS").unwrap_or_else(|_| "0.0.0.0:3000".to_string());
 
     info!("🌐 Server starting on http://{}", bind_address);
+    info!("📖 OpenAPI spec at http://{}/api-docs/openapi.json", bind_address);
+    info!("🔍 Swagger UI at http://{}/api-docs/", bind_address);
 
-    // Start HTTP server
     HttpServer::new(move || {
         let cors = Cors::default()
             .allow_any_origin()
@@ -306,6 +426,10 @@ async fn main() -> anyhow::Result<()> {
             .service(execute_workflow)
             .service(websocket_events)
             .service(list_node_types)
+            .service(
+                SwaggerUi::new("/api-docs/{_:.*}")
+                    .url("/api-docs/openapi.json", ApiDoc::openapi()),
+            )
     })
     .bind(&bind_address)?
     .run()
