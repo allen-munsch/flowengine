@@ -1,0 +1,70 @@
+{
+  "id": "a91fcb21-bfa0-4a8e-b556-f645a07d3064",
+  "name": "Trello \u2014 List Cards",
+  "description": "Lists cards from a Trello board",
+  "nodes": [
+    {
+      "id": "9920b8dc-bba6-4c1c-8072-2a2968aed081",
+      "node_type": "api.call",
+      "name": "Trello \u2014 List Cards",
+      "config": {
+        "zypi_url": {
+          "type": "String",
+          "value": "http://localhost:4000"
+        },
+        "image": {
+          "type": "String",
+          "value": "ubuntu:24.04"
+        },
+        "packages": {
+          "type": "Array",
+          "value": [
+            {
+              "type": "String",
+              "value": "py-trello"
+            }
+          ]
+        },
+        "script": {
+          "type": "String",
+          "value": "import os, json\nfrom trello import TrelloClient\n\nkey = os.environ.get('TRELLO_KEY', '')\ntoken = os.environ.get('TRELLO_TOKEN', '')\nboard_name = os.environ.get('BOARD', '')\n\nclient = TrelloClient(api_key=key, token=token)\nboard = next((b for b in client.list_boards() if b.name == board_name), None)\n\nif not board:\n    print(json.dumps({'error': f'Board {board_name} not found'}))\n    raise SystemExit(1)\n\ncards = []\nfor lst in board.list_lists():\n    for card in lst.list_cards():\n        cards.append({'id': card.id, 'name': card.name, 'list': lst.name, 'url': card.url})\n\nprint(json.dumps({'board': board_name, 'count': len(cards), 'cards': cards}))"
+        },
+        "timeout": {
+          "type": "Number",
+          "value": 30
+        },
+        "memory_mb": {
+          "type": "Number",
+          "value": 256
+        }
+      },
+      "retry_policy": {
+        "max_attempts": 3,
+        "delay_ms": 1000,
+        "backoff_multiplier": 2.0,
+        "max_delay_ms": 10000,
+        "retry_on_timeout": true
+      }
+    },
+    {
+      "id": "d4194d84-f14f-453c-8a1e-b036893ad778",
+      "node_type": "debug.log",
+      "name": "Output",
+      "config": {}
+    }
+  ],
+  "connections": [
+    {
+      "from_node": "9920b8dc-bba6-4c1c-8072-2a2968aed081",
+      "from_port": "output",
+      "to_node": "d4194d84-f14f-453c-8a1e-b036893ad778",
+      "to_port": "message"
+    }
+  ],
+  "triggers": [],
+  "settings": {
+    "max_execution_time_ms": 120000,
+    "max_parallel_nodes": 10,
+    "on_error": "StopWorkflow"
+  }
+}

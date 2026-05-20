@@ -1,0 +1,70 @@
+{
+  "id": "1dd33d61-4ae1-4364-b9da-a86423498eb3",
+  "name": "Notion \u2014 Query Database",
+  "description": "Queries a Notion database using the official SDK",
+  "nodes": [
+    {
+      "id": "36d551a0-325e-43c1-a961-181ef051fde7",
+      "node_type": "api.call",
+      "name": "Notion \u2014 Query Database",
+      "config": {
+        "zypi_url": {
+          "type": "String",
+          "value": "http://localhost:4000"
+        },
+        "image": {
+          "type": "String",
+          "value": "ubuntu:24.04"
+        },
+        "packages": {
+          "type": "Array",
+          "value": [
+            {
+              "type": "String",
+              "value": "notion-client"
+            }
+          ]
+        },
+        "script": {
+          "type": "String",
+          "value": "import os, json\nfrom notion_client import Client\n\ntoken = os.environ.get('NOTION_TOKEN', '')\ndatabase_id = os.environ.get('DATABASE_ID', '')\n\nnotion = Client(auth=token)\nresults = notion.databases.query(database_id=database_id, page_size=10)\n\npages = []\nfor page in results.get('results', []):\n    props = page.get('properties', {})\n    title = ''\n    for k, v in props.items():\n        if v.get('type') == 'title':\n            title = ''.join([t.get('plain_text', '') for t in v.get('title', [])])\n            break\n    pages.append({'id': page['id'], 'title': title, 'created': page.get('created_time', '')})\n\nprint(json.dumps({'database_id': database_id, 'count': len(pages), 'pages': pages}))"
+        },
+        "timeout": {
+          "type": "Number",
+          "value": 30
+        },
+        "memory_mb": {
+          "type": "Number",
+          "value": 256
+        }
+      },
+      "retry_policy": {
+        "max_attempts": 3,
+        "delay_ms": 1000,
+        "backoff_multiplier": 2.0,
+        "max_delay_ms": 10000,
+        "retry_on_timeout": true
+      }
+    },
+    {
+      "id": "c9b06652-912b-4a3c-a22c-31abcb7ea8b1",
+      "node_type": "debug.log",
+      "name": "Output",
+      "config": {}
+    }
+  ],
+  "connections": [
+    {
+      "from_node": "36d551a0-325e-43c1-a961-181ef051fde7",
+      "from_port": "output",
+      "to_node": "c9b06652-912b-4a3c-a22c-31abcb7ea8b1",
+      "to_port": "message"
+    }
+  ],
+  "triggers": [],
+  "settings": {
+    "max_execution_time_ms": 120000,
+    "max_parallel_nodes": 10,
+    "on_error": "StopWorkflow"
+  }
+}

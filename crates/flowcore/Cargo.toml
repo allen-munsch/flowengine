@@ -1,0 +1,18 @@
+[package]
+name = "flowcore"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tokio-util = "0.7"
+uuid = { workspace = true }
+chrono = { workspace = true }
+iggy = "0.7.0"
+tracing.workspace = true
+futures-util = "0.3.31"
+tracing-subscriber.workspace = true

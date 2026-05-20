@@ -1,0 +1,70 @@
+{
+  "id": "266d0443-9c59-4185-9573-2c6de1ec62e9",
+  "name": "Slack \u2014 Post Message",
+  "description": "Posts a message to a Slack channel using slack-sdk",
+  "nodes": [
+    {
+      "id": "0c03d0dc-00d4-4e7e-b84c-f5e1915cb403",
+      "node_type": "api.call",
+      "name": "Slack \u2014 Post Message",
+      "config": {
+        "zypi_url": {
+          "type": "String",
+          "value": "http://localhost:4000"
+        },
+        "image": {
+          "type": "String",
+          "value": "ubuntu:24.04"
+        },
+        "packages": {
+          "type": "Array",
+          "value": [
+            {
+              "type": "String",
+              "value": "slack-sdk"
+            }
+          ]
+        },
+        "script": {
+          "type": "String",
+          "value": "import os, json\nfrom slack_sdk import WebClient\nfrom slack_sdk.errors import SlackApiError\n\ntoken = os.environ.get('SLACK_TOKEN', '')\nchannel = os.environ.get('CHANNEL', '#general')\ntext = os.environ.get('TEXT', 'Hello from FlowEngine!')\n\nclient = WebClient(token=token)\ntry:\n    result = client.chat_postMessage(channel=channel, text=text)\n    print(json.dumps({'ok': True, 'channel': channel, 'ts': result['ts']}))\nexcept SlackApiError as e:\n    print(json.dumps({'ok': False, 'error': str(e)}))"
+        },
+        "timeout": {
+          "type": "Number",
+          "value": 30
+        },
+        "memory_mb": {
+          "type": "Number",
+          "value": 256
+        }
+      },
+      "retry_policy": {
+        "max_attempts": 3,
+        "delay_ms": 1000,
+        "backoff_multiplier": 2.0,
+        "max_delay_ms": 10000,
+        "retry_on_timeout": true
+      }
+    },
+    {
+      "id": "90c948e1-ce7c-4396-b576-724ce6fe6784",
+      "node_type": "debug.log",
+      "name": "Output",
+      "config": {}
+    }
+  ],
+  "connections": [
+    {
+      "from_node": "0c03d0dc-00d4-4e7e-b84c-f5e1915cb403",
+      "from_port": "output",
+      "to_node": "90c948e1-ce7c-4396-b576-724ce6fe6784",
+      "to_port": "message"
+    }
+  ],
+  "triggers": [],
+  "settings": {
+    "max_execution_time_ms": 120000,
+    "max_parallel_nodes": 10,
+    "on_error": "StopWorkflow"
+  }
+}

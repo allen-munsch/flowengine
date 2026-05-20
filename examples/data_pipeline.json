@@ -1,0 +1,106 @@
+{
+  "id": "660f9511-f3ac-42e5-b827-557766551111",
+  "name": "API Data Pipeline",
+  "description": "Fetches JSON data, transforms it, and logs results",
+  "nodes": [
+    {
+      "id": "d78dfffd-0a95-4e30-97b4-dc792d0217c8",
+      "node_type": "http.request",
+      "name": "Fetch User Data",
+      "config": {},
+      "position": {
+        "x": 100.0,
+        "y": 100.0
+      },
+      "retry_policy": {
+        "max_attempts": 3,
+        "delay_ms": 1000,
+        "backoff_multiplier": 2.0
+      }
+    },
+    {
+      "id": "d78dfffd-0a95-4e30-97b4-dc792d0217c2",
+      "node_type": "transform.json_parse",
+      "name": "Parse JSON",
+      "config": {},
+      "position": {
+        "x": 300.0,
+        "y": 100.0
+      },
+      "retry_policy": null
+    },
+    {
+      "id": "d78dfffd-0a95-4e30-97b4-dc792d0217c3",
+      "node_type": "time.delay",
+      "name": "Wait 1s",
+      "config": {},
+      "position": {
+        "x": 500.0,
+        "y": 100.0
+      },
+      "retry_policy": null
+    },
+    {
+      "id": "d78dfffd-0a95-4e30-97b4-dc792d0217c4",
+      "node_type": "transform.json_stringify",
+      "name": "Convert to String",
+      "config": {},
+      "position": {
+        "x": 700.0,
+        "y": 100.0
+      },
+      "retry_policy": null
+    },
+    {
+      "id": "d78dfffd-0a95-4e30-97b4-dc792d0217c5",
+      "node_type": "debug.log",
+      "name": "Log Final Result",
+      "config": {},
+      "position": {
+        "x": 900.0,
+        "y": 100.0
+      },
+      "retry_policy": null
+    }
+  ],
+  "connections": [
+    {
+      "from_node": "d78dfffd-0a95-4e30-97b4-dc792d0217c8",
+      "from_port": "body",
+      "to_node": "d78dfffd-0a95-4e30-97b4-dc792d0217c2",
+      "to_port": "json"
+    },
+    {
+      "from_node": "d78dfffd-0a95-4e30-97b4-dc792d0217c2",
+      "from_port": "parsed",
+      "to_node": "d78dfffd-0a95-4e30-97b4-dc792d0217c3",
+      "to_port": "data"
+    },
+    {
+      "from_node": "d78dfffd-0a95-4e30-97b4-dc792d0217c3",
+      "from_port": "data",
+      "to_node": "d78dfffd-0a95-4e30-97b4-dc792d0217c4",
+      "to_port": "value"
+    },
+    {
+      "from_node": "d78dfffd-0a95-4e30-97b4-dc792d0217c4",
+      "from_port": "json",
+      "to_node": "d78dfffd-0a95-4e30-97b4-dc792d0217c5",
+      "to_port": "message"
+    }
+  ],
+  "triggers": [
+    {
+      "id": "d78dfffd-0a95-4e30-97b4-dc792d0217c6",
+      "trigger_type": {
+        "type": "Manual"
+      },
+      "enabled": true
+    }
+  ],
+  "settings": {
+    "max_execution_time_ms": 30000,
+    "max_parallel_nodes": 5,
+    "on_error": "StopWorkflow"
+  }
+}

@@ -1,0 +1,65 @@
+{
+  "id": "8a0c4fbd-7f2e-4ba4-81c4-d9faed69924e",
+  "name": "Discord \u2014 Send Webhook",
+  "description": "Sends a message to a Discord webhook (no SDK needed)",
+  "nodes": [
+    {
+      "id": "9585656c-a561-4663-b761-39a0e103dcc4",
+      "node_type": "api.call",
+      "name": "Discord \u2014 Send Webhook",
+      "config": {
+        "zypi_url": {
+          "type": "String",
+          "value": "http://localhost:4000"
+        },
+        "image": {
+          "type": "String",
+          "value": "ubuntu:24.04"
+        },
+        "packages": {
+          "type": "Array",
+          "value": []
+        },
+        "script": {
+          "type": "String",
+          "value": "import os, json, urllib.request\n\nwebhook_url = os.environ.get('WEBHOOK_URL', '')\nmessage = os.environ.get('MESSAGE', 'Hello from FlowEngine sandbox!')\n\ndata = json.dumps({'content': message}).encode()\nreq = urllib.request.Request(webhook_url, data=data, headers={'Content-Type': 'application/json'})\nresp = urllib.request.urlopen(req)\n\nprint(json.dumps({'sent': True, 'status': resp.status}))"
+        },
+        "timeout": {
+          "type": "Number",
+          "value": 30
+        },
+        "memory_mb": {
+          "type": "Number",
+          "value": 256
+        }
+      },
+      "retry_policy": {
+        "max_attempts": 3,
+        "delay_ms": 1000,
+        "backoff_multiplier": 2.0,
+        "max_delay_ms": 10000,
+        "retry_on_timeout": true
+      }
+    },
+    {
+      "id": "2b05179b-d424-4f44-ad7f-3cda5f56e88a",
+      "node_type": "debug.log",
+      "name": "Output",
+      "config": {}
+    }
+  ],
+  "connections": [
+    {
+      "from_node": "9585656c-a561-4663-b761-39a0e103dcc4",
+      "from_port": "output",
+      "to_node": "2b05179b-d424-4f44-ad7f-3cda5f56e88a",
+      "to_port": "message"
+    }
+  ],
+  "triggers": [],
+  "settings": {
+    "max_execution_time_ms": 120000,
+    "max_parallel_nodes": 10,
+    "on_error": "StopWorkflow"
+  }
+}

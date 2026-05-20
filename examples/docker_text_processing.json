@@ -1,0 +1,85 @@
+{
+  "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "name": "Text Processing Pipeline",
+  "description": "Fetch text, count words, find long words",
+  "nodes": [
+    {
+      "id": "fetch-text",
+      "node_type": "http.request",
+      "name": "Fetch Quote",
+      "config": {},
+      "position": {"x": 100, "y": 100},
+      "retry_policy": null
+    },
+    {
+      "id": "count-words",
+      "node_type": "docker.run",
+      "name": "Count Words",
+      "config": {
+        "image": "alpine:latest",
+        "command": "wc -w"
+      },
+      "position": {"x": 300, "y": 100},
+      "retry_policy": null
+    },
+    {
+      "id": "find-long-words",
+      "node_type": "docker.run",
+      "name": "Find Long Words",
+      "config": {
+        "image": "alpine:latest",
+        "command": "sh -c \"grep -oE '[a-zA-Z]{8,}' | sort -u | head -5\""
+      },
+      "position": {"x": 300, "y": 200},
+      "retry_policy": null
+    },
+    {
+      "id": "log-count",
+      "node_type": "debug.log",
+      "name": "Log Word Count",
+      "config": {},
+      "position": {"x": 500, "y": 100},
+      "retry_policy": null
+    },
+    {
+      "id": "log-words",
+      "node_type": "debug.log",
+      "name": "Log Long Words",
+      "config": {},
+      "position": {"x": 500, "y": 200},
+      "retry_policy": null
+    }
+  ],
+  "connections": [
+    {
+      "from_node": "fetch-text",
+      "from_port": "body",
+      "to_node": "count-words",
+      "to_port": "data"
+    },
+    {
+      "from_node": "fetch-text",
+      "from_port": "body",
+      "to_node": "find-long-words",
+      "to_port": "data"
+    },
+    {
+      "from_node": "count-words",
+      "from_port": "output",
+      "to_node": "log-count",
+      "to_port": "message"
+    },
+    {
+      "from_node": "find-long-words",
+      "from_port": "output",
+      "to_node": "log-words",
+      "to_port": "message"
+    }
+  ],
+  "triggers": [],
+  "settings": {
+    "max_execution_time_ms": 30000,
+    "max_parallel_nodes": 5,
+    "on_error": "StopWorkflow"
+  }
+}

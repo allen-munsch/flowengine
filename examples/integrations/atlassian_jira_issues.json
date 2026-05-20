@@ -1,0 +1,70 @@
+{
+  "id": "a7f4b74c-9572-4fe1-b338-4be0c0c28506",
+  "name": "Jira \u2014 Search Issues",
+  "description": "Searches Jira issues via JQL",
+  "nodes": [
+    {
+      "id": "6a92782a-77e3-4bdc-89ca-f5e94d7afe28",
+      "node_type": "api.call",
+      "name": "Jira \u2014 Search Issues",
+      "config": {
+        "zypi_url": {
+          "type": "String",
+          "value": "http://localhost:4000"
+        },
+        "image": {
+          "type": "String",
+          "value": "ubuntu:24.04"
+        },
+        "packages": {
+          "type": "Array",
+          "value": [
+            {
+              "type": "String",
+              "value": "atlassian-python-api"
+            }
+          ]
+        },
+        "script": {
+          "type": "String",
+          "value": "import os, json\nfrom atlassian import Jira\n\nurl = os.environ.get('JIRA_URL', '')\nuser = os.environ.get('JIRA_USER', '')\ntoken = os.environ.get('JIRA_TOKEN', '')\njql = os.environ.get('JQL', 'project = DEMO ORDER BY created DESC')\n\njira = Jira(url=url, username=user, password=token, cloud=True)\nissues = jira.jql(jql, limit=10)\n\nresult = []\nfor issue in issues.get('issues', []):\n    fields = issue.get('fields', {})\n    result.append({\n        'key': issue['key'],\n        'summary': fields.get('summary', ''),\n        'status': fields.get('status', {}).get('name', ''),\n        'assignee': (fields.get('assignee') or {}).get('displayName', 'Unassigned')\n    })\n\nprint(json.dumps({'jql': jql, 'count': len(result), 'issues': result}))"
+        },
+        "timeout": {
+          "type": "Number",
+          "value": 30
+        },
+        "memory_mb": {
+          "type": "Number",
+          "value": 256
+        }
+      },
+      "retry_policy": {
+        "max_attempts": 3,
+        "delay_ms": 1000,
+        "backoff_multiplier": 2.0,
+        "max_delay_ms": 10000,
+        "retry_on_timeout": true
+      }
+    },
+    {
+      "id": "75bbb204-b64c-4b25-ae02-541e3c72415a",
+      "node_type": "debug.log",
+      "name": "Output",
+      "config": {}
+    }
+  ],
+  "connections": [
+    {
+      "from_node": "6a92782a-77e3-4bdc-89ca-f5e94d7afe28",
+      "from_port": "output",
+      "to_node": "75bbb204-b64c-4b25-ae02-541e3c72415a",
+      "to_port": "message"
+    }
+  ],
+  "triggers": [],
+  "settings": {
+    "max_execution_time_ms": 120000,
+    "max_parallel_nodes": 10,
+    "on_error": "StopWorkflow"
+  }
+}

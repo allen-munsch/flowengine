@@ -1,0 +1,70 @@
+{
+  "id": "d4103d61-443f-42cd-bee4-4ccf5683671a",
+  "name": "HubSpot \u2014 List Contacts",
+  "description": "Fetches recent contacts from HubSpot CRM",
+  "nodes": [
+    {
+      "id": "e553f114-4418-4b81-8ea1-e508cdd53124",
+      "node_type": "api.call",
+      "name": "HubSpot \u2014 List Contacts",
+      "config": {
+        "zypi_url": {
+          "type": "String",
+          "value": "http://localhost:4000"
+        },
+        "image": {
+          "type": "String",
+          "value": "ubuntu:24.04"
+        },
+        "packages": {
+          "type": "Array",
+          "value": [
+            {
+              "type": "String",
+              "value": "hubspot-api-client"
+            }
+          ]
+        },
+        "script": {
+          "type": "String",
+          "value": "import os, json\nfrom hubspot import HubSpot\nfrom hubspot.crm.contacts import SimplePublicObjectInput\n\ntoken = os.environ.get('HUBSPOT_TOKEN', '')\napi_client = HubSpot(access_token=token)\n\ncontacts = api_client.crm.contacts.basic_api.get_page(limit=10, archived=False)\n\nresult = []\nfor contact in contacts.results:\n    props = contact.properties\n    result.append({\n        'id': contact.id,\n        'email': props.get('email', ''),\n        'firstname': props.get('firstname', ''),\n        'lastname': props.get('lastname', ''),\n        'company': props.get('company', '')\n    })\n\nprint(json.dumps({'count': len(result), 'contacts': result}))"
+        },
+        "timeout": {
+          "type": "Number",
+          "value": 30
+        },
+        "memory_mb": {
+          "type": "Number",
+          "value": 256
+        }
+      },
+      "retry_policy": {
+        "max_attempts": 3,
+        "delay_ms": 1000,
+        "backoff_multiplier": 2.0,
+        "max_delay_ms": 10000,
+        "retry_on_timeout": true
+      }
+    },
+    {
+      "id": "0ee84a99-b0e6-495d-a708-fd058b303b24",
+      "node_type": "debug.log",
+      "name": "Output",
+      "config": {}
+    }
+  ],
+  "connections": [
+    {
+      "from_node": "e553f114-4418-4b81-8ea1-e508cdd53124",
+      "from_port": "output",
+      "to_node": "0ee84a99-b0e6-495d-a708-fd058b303b24",
+      "to_port": "message"
+    }
+  ],
+  "triggers": [],
+  "settings": {
+    "max_execution_time_ms": 120000,
+    "max_parallel_nodes": 10,
+    "on_error": "StopWorkflow"
+  }
+}

@@ -1,0 +1,269 @@
+syntax = "proto3";
+
+package flowengine.v1;
+
+// ── FlowEngine DAG Workflow Service ─────────────────────────────────────────
+//
+// gRPC service for typed workflow orchestration.
+// Runs on port 3001. REST API remains on port 3000 for backward compat.
+//
+// This is the canonical, typed interface that Weft and YAS-MCP call for
+// workflow CRUD, execution, and event streaming.
+
+service FlowEngineService {
+  // Create a new workflow definition.
+  rpc CreateWorkflow(CreateWorkflowRequest) returns (CreateWorkflowResponse);
+
+  // Execute a workflow with inputs. Returns a stream of execution events
+  // (NodeStarted, NodeCompleted, NodeFailed, WorkflowCompleted).
+  rpc ExecuteWorkflow(ExecuteWorkflowRequest) returns (stream WorkflowEvent);
+
+  // Get the current status of a workflow execution.
+  rpc GetWorkflowStatus(GetWorkflowStatusRequest) returns (WorkflowStatusResponse);
+
+  // Cancel a running workflow execution.
+  rpc CancelWorkflow(CancelWorkflowRequest) returns (CancelWorkflowResponse);
+
+  // Health check.
+  rpc Health(HealthRequest) returns (HealthResponse);
+}
+
+// ── Messages ───────────────────────────────────────────────────────────────
+
+// ── Health ─────────────────────────────────────────────────────────────────
+
+message HealthRequest {
+  // intentionally empty
+}
+
+message HealthResponse {
+  string status = 1;     // "healthy"
+  string version = 2;    // semver
+  string service = 3;    // "flowengine"
+}
+
+// ── Create Workflow ────────────────────────────────────────────────────────
+
+message CreateWorkflowRequest {
+  Workflow workflow = 1;
+}
+
+message CreateWorkflowResponse {
+  string workflow_id = 1;
+  string message = 2;
+}
+
+// ── Execute Workflow ────────────────────────────────────────────────────────
+
+message ExecuteWorkflowRequest {
+  string workflow_id = 1;
+  map<string, Value> inputs = 2;
+}
+
+// ── Streamed execution events ──────────────────────────────────────────────
+
+message WorkflowEvent {
+  // Each event carries exactly one payload type.
+  oneof event {
+    WorkflowStartedEvent workflow_started = 1;
+    WorkflowCompletedEvent workflow_completed = 2;
+    NodeStartedEvent node_started = 3;
+    NodeCompletedEvent node_completed = 4;
+    NodeFailedEvent node_failed = 5;
+    NodeEventMessage node_event = 6;
+  }
+}
+
+message WorkflowStartedEvent {
+  string execution_id = 1;
+  string workflow_id = 2;
+  string timestamp = 3;
+}
+
+message WorkflowCompletedEvent {
+  string execution_id = 1;
+  bool success = 2;
+  uint64 duration_ms = 3;
+  string timestamp = 4;
+}
+
+message NodeStartedEvent {
+  string execution_id = 1;
+  string node_id = 2;
+  string node_type = 3;
+  string timestamp = 4;
+}
+
+message NodeCompletedEvent {
+  string execution_id = 1;
+  string node_id = 2;
+  map<string, Value> outputs = 3;
+  uint64 duration_ms = 4;
+  string timestamp = 5;
+}
+
+message NodeFailedEvent {
+  string execution_id = 1;
+  string node_id = 2;
+  string error = 3;
+  string timestamp = 4;
+}
+
+message NodeEventMessage {
+  string execution_id = 1;
+  string node_id = 2;
+  oneof detail {
+    NodeInfo info = 3;
+    NodeStdoutLine stdout_line = 4;
+    NodeStderrLine stderr_line = 5;
+    NodeProgress progress = 6;
+  }
+  string timestamp = 7;
+}
+
+message NodeInfo {
+  string message = 1;
+}
+
+message NodeStdoutLine {
+  string line = 1;
+}
+
+message NodeStderrLine {
+  string line = 1;
+}
+
+message NodeProgress {
+  double percent = 1;
+  string message = 2;
+}
+
+// ── Workflow Status ────────────────────────────────────────────────────────
+
+message GetWorkflowStatusRequest {
+  string execution_id = 1;
+}
+
+message WorkflowStatusResponse {
+  string execution_id = 1;
+  string workflow_id = 2;
+  string status = 3;          // pending, running, completed, failed, cancelled
+  uint32 completed_nodes = 4;
+  uint32 total_nodes = 5;
+  uint64 duration_ms = 6;
+  string started_at = 7;
+  string completed_at = 8;
+}
+
+// ── Cancel ─────────────────────────────────────────────────────────────────
+
+message CancelWorkflowRequest {
+  string execution_id = 1;
+}
+
+message CancelWorkflowResponse {
+  string execution_id = 1;
+  string status = 2;          // "cancelled"
+}
+
+// ── Workflow Definition ────────────────────────────────────────────────────
+
+message Workflow {
+  string id = 1;
+  string name = 2;
+  optional string description = 3;
+  repeated WorkflowNode nodes = 4;
+  repeated WorkflowConnection connections = 5;
+  repeated WorkflowTrigger triggers = 6;
+  WorkflowSettings settings = 7;
+}
+
+message WorkflowNode {
+  string id = 1;
+  string node_type = 2;
+  optional string name = 3;
+  map<string, Value> config = 4;
+  optional NodePosition position = 5;
+  optional RetryPolicy retry_policy = 6;
+  repeated string depends_on = 7;
+}
+
+message WorkflowConnection {
+  string from_node = 1;
+  string from_port = 2;
+  string to_node = 3;
+  string to_port = 4;
+}
+
+message WorkflowTrigger {
+  string id = 1;
+  bool enabled = 2;
+  oneof trigger_type {
+    TriggerManual manual = 3;
+    TriggerCron cron = 4;
+    TriggerWebhook webhook = 5;
+    TriggerEvent event = 6;
+  }
+}
+
+message TriggerManual {}
+message TriggerCron {
+  string expression = 1;
+}
+message TriggerWebhook {
+  string path = 1;
+}
+message TriggerEvent {
+  string event_type = 1;
+}
+
+message NodePosition {
+  float x = 1;
+  float y = 2;
+}
+
+message RetryPolicy {
+  uint32 max_attempts = 1;
+  uint64 delay_ms = 2;
+  double backoff_multiplier = 3;
+  optional uint64 max_delay_ms = 4;
+  bool retry_on_timeout = 5;
+}
+
+message WorkflowSettings {
+  optional uint64 max_execution_time_ms = 1;
+  uint32 max_parallel_nodes = 2;
+  ErrorHandling on_error = 3;
+}
+
+enum ErrorHandling {
+  ERROR_HANDLING_UNSPECIFIED = 0;
+  ERROR_HANDLING_STOP = 1;
+  ERROR_HANDLING_CONTINUE = 2;
+  ERROR_HANDLING_RETRY = 3;
+}
+
+// ── Dynamic Value Type ─────────────────────────────────────────────────────
+
+message Value {
+  oneof kind {
+    NullValue null_value = 1;
+    bool bool_value = 2;
+    double number_value = 3;
+    string string_value = 4;
+    bytes bytes_value = 5;
+    string json_value = 6;       // JSON-encoded string
+    ValueList array_value = 7;
+    ValueMap object_value = 8;
+  }
+}
+
+message NullValue {}
+
+message ValueList {
+  repeated Value values = 1;
+}
+
+message ValueMap {
+  map<string, Value> entries = 1;
+}

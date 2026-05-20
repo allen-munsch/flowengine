@@ -1,0 +1,80 @@
+{
+  "id": "docker-data-001",
+  "name": "Data Analysis Pipeline",
+  "description": "Fetch JSON data, analyze with Python, generate stats",
+  "nodes": [
+    {
+      "id": "fetch-users",
+      "node_type": "http.request",
+      "name": "Fetch User Data",
+      "config": {},
+      "position": {"x": 100, "y": 100}
+    },
+    {
+      "id": "analyze-python",
+      "node_type": "docker.run",
+      "name": "Analyze with Python",
+      "config": {
+        "image": "python:3.11-slim",
+        "command": "python -c \"import sys, json; users=json.load(sys.stdin); stats={'total': len(users), 'companies': len(set(u['company']['name'] for u in users)), 'domains': [u['email'].split('@')[1] for u in users]}; print(json.dumps(stats))\""
+      },
+      "position": {"x": 300, "y": 100}
+    },
+    {
+      "id": "parse-stats",
+      "node_type": "transform.json_parse",
+      "name": "Parse Statistics",
+      "config": {},
+      "position": {"x": 500, "y": 100}
+    },
+    {
+      "id": "format-report",
+      "node_type": "docker.run",
+      "name": "Format Report",
+      "config": {
+        "image": "alpine:latest",
+        "command": "sh -c \"cat - | jq -r '.total' | xargs -I {} echo 'Total users: {}'\""
+      },
+      "position": {"x": 700, "y": 100}
+    },
+    {
+      "id": "log-report",
+      "node_type": "debug.log",
+      "name": "Log Report",
+      "config": {},
+      "position": {"x": 900, "y": 100}
+    }
+  ],
+  "connections": [
+    {
+      "from_node": "fetch-users",
+      "from_port": "body",
+      "to_node": "analyze-python",
+      "to_port": "data"
+    },
+    {
+      "from_node": "analyze-python",
+      "from_port": "output",
+      "to_node": "parse-stats",
+      "to_port": "json"
+    },
+    {
+      "from_node": "parse-stats",
+      "from_port": "parsed",
+      "to_node": "format-report",
+      "to_port": "data"
+    },
+    {
+      "from_node": "format-report",
+      "from_port": "output",
+      "to_node": "log-report",
+      "to_port": "message"
+    }
+  ],
+  "triggers": [],
+  "settings": {
+    "max_execution_time_ms": 30000,
+    "max_parallel_nodes": 5,
+    "on_error": "StopWorkflow"
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "id": "a1b2c3d4-e5f6-4890-abcd-ef1234568001",
+  "name": "GitHub — List Issues",
+  "description": "Fetches open issues from a GitHub repo using PyGithub in a sandbox",
+  "nodes": [
+    {
+      "id": "a1b2c3d4-e5f6-4890-abcd-ef1234568101",
+      "node_type": "api.call",
+      "name": "GitHub: List Issues",
+      "config": {
+        "zypi_url": {"type": "String", "value": "http://localhost:4000"},
+        "image": {"type": "String", "value": "ubuntu:24.04"},
+        "packages": {"type": "Array", "value": [
+          {"type": "String", "value": "PyGithub"}
+        ]},
+        "script": {"type": "String", "value": "import os, json\nfrom github import Github\n\ntoken = os.environ.get('GITHUB_TOKEN', '')\nrepo_name = os.environ.get('REPO', 'rust-lang/rust')\n\nif not token:\n    print(json.dumps({'error': 'GITHUB_TOKEN env var required'}))\n    raise SystemExit(1)\n\ng = Github(token)\nrepo = g.get_repo(repo_name)\nissues = repo.get_issues(state='open', sort='updated', direction='desc')[:10]\n\nresult = []\nfor issue in issues:\n    result.append({\n        'number': issue.number,\n        'title': issue.title,\n        'state': issue.state,\n        'created_at': str(issue.created_at),\n        'url': issue.html_url,\n        'labels': [l.name for l in issue.labels]\n    })\n\nprint(json.dumps({'repo': repo_name, 'count': len(result), 'issues': result}))"},
+        "timeout": {"type": "Number", "value": 30},
+        "memory_mb": {"type": "Number", "value": 256}
+      },
+      "retry_policy": {
+        "max_attempts": 3,
+        "delay_ms": 1000,
+        "backoff_multiplier": 2.0,
+        "max_delay_ms": 10000,
+        "retry_on_timeout": true
+      }
+    },
+    {
+      "id": "a1b2c3d4-e5f6-4890-abcd-ef1234568102",
+      "node_type": "debug.log",
+      "name": "Show Issues",
+      "config": {}
+    }
+  ],
+  "connections": [
+    {
+      "from_node": "a1b2c3d4-e5f6-4890-abcd-ef1234568101",
+      "from_port": "output",
+      "to_node": "a1b2c3d4-e5f6-4890-abcd-ef1234568102",
+      "to_port": "message"
+    }
+  ],
+  "triggers": [],
+  "settings": {
+    "max_execution_time_ms": 60000,
+    "max_parallel_nodes": 10,
+    "on_error": "StopWorkflow"
+  }
+}

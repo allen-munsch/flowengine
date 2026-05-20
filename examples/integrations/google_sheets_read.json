@@ -1,0 +1,74 @@
+{
+  "id": "2a1f5205-61ab-41eb-a494-7e68f3a12c60",
+  "name": "Google Sheets \u2014 Read Range",
+  "description": "Reads a range from Google Sheets",
+  "nodes": [
+    {
+      "id": "17091421-cede-4f24-8ac7-6e5951f7d722",
+      "node_type": "api.call",
+      "name": "Google Sheets \u2014 Read Range",
+      "config": {
+        "zypi_url": {
+          "type": "String",
+          "value": "http://localhost:4000"
+        },
+        "image": {
+          "type": "String",
+          "value": "ubuntu:24.04"
+        },
+        "packages": {
+          "type": "Array",
+          "value": [
+            {
+              "type": "String",
+              "value": "google-api-python-client"
+            },
+            {
+              "type": "String",
+              "value": "google-auth-oauthlib"
+            }
+          ]
+        },
+        "script": {
+          "type": "String",
+          "value": "import os, json\nfrom google.oauth2.credentials import Credentials\nfrom googleapiclient.discovery import build\n\ntoken_json = os.environ.get('SHEETS_TOKEN', '{}')\ncreds = Credentials.from_authorized_user_info(json.loads(token_json))\n\nspreadsheet_id = os.environ.get('SPREADSHEET_ID', '')\nrange_name = os.environ.get('RANGE', 'Sheet1!A1:D10')\n\nservice = build('sheets', 'v4', credentials=creds)\nresult = service.spreadsheets().values().get(\n    spreadsheetId=spreadsheet_id, range=range_name\n).execute()\n\nvalues = result.get('values', [])\nprint(json.dumps({'range': range_name, 'rows': len(values), 'data': values}))"
+        },
+        "timeout": {
+          "type": "Number",
+          "value": 30
+        },
+        "memory_mb": {
+          "type": "Number",
+          "value": 384
+        }
+      },
+      "retry_policy": {
+        "max_attempts": 3,
+        "delay_ms": 1000,
+        "backoff_multiplier": 2.0,
+        "max_delay_ms": 10000,
+        "retry_on_timeout": true
+      }
+    },
+    {
+      "id": "32e128e5-3942-4f75-9349-c11f7a98f7b8",
+      "node_type": "debug.log",
+      "name": "Output",
+      "config": {}
+    }
+  ],
+  "connections": [
+    {
+      "from_node": "17091421-cede-4f24-8ac7-6e5951f7d722",
+      "from_port": "output",
+      "to_node": "32e128e5-3942-4f75-9349-c11f7a98f7b8",
+      "to_port": "message"
+    }
+  ],
+  "triggers": [],
+  "settings": {
+    "max_execution_time_ms": 120000,
+    "max_parallel_nodes": 10,
+    "on_error": "StopWorkflow"
+  }
+}

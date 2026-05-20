@@ -1,0 +1,8 @@
+target/
+**/*.rs.bk
+python/
+examples/
+tests/
+docs/
+.git/
+.github/

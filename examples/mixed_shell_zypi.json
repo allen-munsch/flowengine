@@ -1,0 +1,106 @@
+{
+  "id": "a1b2c3d4-e5f6-4890-abcd-ef1234567003",
+  "name": "Mixed Shell + Zypi Pipeline",
+  "description": "Local preprocessing → sandboxed processing → local postprocessing",
+  "nodes": [
+    {
+      "id": "a1b2c3d4-e5f6-4890-abcd-ef1234567301",
+      "node_type": "shell.exec",
+      "name": "Generate Data (curl)",
+      "config": {
+        "command": {"type": "String", "value": "/usr/bin/curl"},
+        "args": {"type": "Array", "value": [
+          {"type": "String", "value": "-s"},
+          {"type": "String", "value": "https://api.github.com/repos/rust-lang/rust"}
+        ]},
+        "timeout": {"type": "Number", "value": 15},
+        "stream_output": {"type": "Bool", "value": false}
+      },
+      "retry_policy": {
+        "max_attempts": 3,
+        "delay_ms": 1000,
+        "backoff_multiplier": 2.0,
+        "max_delay_ms": 10000,
+        "retry_on_timeout": true
+      }
+    },
+    {
+      "id": "a1b2c3d4-e5f6-4890-abcd-ef1234567302",
+      "node_type": "shell.exec",
+      "name": "Extract Fields Locally",
+      "config": {
+        "command": {"type": "String", "value": "/usr/bin/python3"},
+        "args": {"type": "Array", "value": [
+          {"type": "String", "value": "-c"},
+          {"type": "String", "value": "import sys, json; data=json.load(sys.stdin); print(json.dumps({'name': data.get('full_name',''), 'stars': data.get('stargazers_count',0), 'forks': data.get('forks_count',0), 'language': data.get('language',''), 'topics': data.get('topics',[])[:5]}))"}
+        ]},
+        "timeout": {"type": "Number", "value": 10}
+      }
+    },
+    {
+      "id": "a1b2c3d4-e5f6-4890-abcd-ef1234567303",
+      "node_type": "zypi.exec",
+      "name": "Analyze in Sandbox",
+      "config": {
+        "url": {"type": "String", "value": "http://localhost:4000"},
+        "image": {"type": "String", "value": "ubuntu:24.04"},
+        "command": {"type": "Array", "value": [
+          {"type": "String", "value": "/usr/bin/python3"},
+          {"type": "String", "value": "-c"},
+          {"type": "String", "value": "import os, json; name=os.environ.get('STDOUT','{}'); d=json.loads(name); score=(d.get('stars',0)*2 + d.get('forks',0)) / 1000.0; print(json.dumps({**d, 'impact_score': round(score,2), 'analysis': 'high' if score>10 else 'medium' if score>1 else 'low'}))"}
+        ]},
+        "timeout": {"type": "Number", "value": 15}
+      }
+    },
+    {
+      "id": "a1b2c3d4-e5f6-4890-abcd-ef1234567304",
+      "node_type": "shell.exec",
+      "name": "Format Report",
+      "config": {
+        "command": {"type": "String", "value": "/usr/bin/python3"},
+        "args": {"type": "Array", "value": [
+          {"type": "String", "value": "-c"},
+          {"type": "String", "value": "import os, json; d=json.loads(os.environ.get('STDOUT','{}')); print(f'📊 {d.get(\"name\",\"?\")}: {d.get(\"stars\",0)}⭐ | {d.get(\"forks\",0)}🍴 | Impact: {d.get(\"impact_score\",0)} ({d.get(\"analysis\",\"?\")}) | Language: {d.get(\"language\",\"?\")}')"}
+        ]}
+      }
+    },
+    {
+      "id": "a1b2c3d4-e5f6-4890-abcd-ef1234567305",
+      "node_type": "debug.log",
+      "name": "Log Report",
+      "config": {}
+    }
+  ],
+  "connections": [
+    {
+      "from_node": "a1b2c3d4-e5f6-4890-abcd-ef1234567301",
+      "from_port": "stdout",
+      "to_node": "a1b2c3d4-e5f6-4890-abcd-ef1234567302",
+      "to_port": "stdin"
+    },
+    {
+      "from_node": "a1b2c3d4-e5f6-4890-abcd-ef1234567302",
+      "from_port": "stdout",
+      "to_node": "a1b2c3d4-e5f6-4890-abcd-ef1234567303",
+      "to_port": "stdin"
+    },
+    {
+      "from_node": "a1b2c3d4-e5f6-4890-abcd-ef1234567303",
+      "from_port": "stdout",
+      "to_node": "a1b2c3d4-e5f6-4890-abcd-ef1234567304",
+      "to_port": "stdin"
+    },
+    {
+      "from_node": "a1b2c3d4-e5f6-4890-abcd-ef1234567304",
+      "from_port": "stdout",
+      "to_node": "a1b2c3d4-e5f6-4890-abcd-ef1234567305",
+      "to_port": "message"
+    }
+  ],
+  "triggers": [],
+  "settings": {
+    "max_execution_time_ms": 60000,
+    "max_parallel_nodes": 10,
+    "on_error": "StopWorkflow"
+  }
+}

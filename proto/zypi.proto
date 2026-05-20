@@ -1,0 +1,87 @@
+syntax = "proto3";
+
+package zypi.v1;
+
+// ── Zypi Sandbox Execution — gRPC Client Types ──────────────────────────
+//
+// Minimal proto for FlowEngine's Zypi gRPC client.
+// Mirrors the canonical Zypi proto at submodules/zypi/proto/zypi.proto.
+// Only includes messages needed by FlowEngine (Execute, SessionExec, CreateSession).
+//
+// Zypi gRPC runs on port 4001. REST fallback on port 4000.
+
+service ZypiService {
+  // One-shot sandbox execution.
+  rpc Execute(SandboxExecRequest) returns (SandboxExecResponse);
+
+  // Create a long-lived sandbox session.
+  rpc CreateSession(CreateSessionRequest) returns (SessionResponse);
+
+  // Execute a command in an existing session.
+  rpc SessionExec(SessionExecRequest) returns (SandboxExecResponse);
+
+  // Health check.
+  rpc Health(HealthRequest) returns (HealthResponse);
+}
+
+// ── One-Shot Execute ──────────────────────────────────────────────────────
+
+message SandboxExecRequest {
+  repeated string command = 1;
+  string image = 2;
+  uint32 timeout_secs = 3;
+  optional uint32 memory_mb = 4;
+  optional uint32 vcpus = 5;
+  map<string, string> env = 6;
+  optional string workdir = 7;
+  map<string, string> files = 8;
+  optional string agent_id = 9;
+  bool stream = 10;
+}
+
+message SandboxExecResponse {
+  string stdout = 1;
+  string stderr = 2;
+  int32 exit_code = 3;
+  uint64 duration_ms = 4;
+  string sandbox_id = 5;
+  bool timed_out = 6;
+}
+
+// ── Sessions ───────────────────────────────────────────────────────────────
+
+message CreateSessionRequest {
+  optional string agent_id = 1;
+  string image = 2;
+  optional uint32 vcpus = 3;
+  optional uint32 memory_mb = 4;
+  map<string, string> metadata = 5;
+}
+
+message SessionResponse {
+  string session_id = 1;
+  string container_id = 2;
+  string ip = 3;
+  string image = 4;
+  string agent_id = 5;
+  string status = 6;
+  string created_at = 7;
+}
+
+message SessionExecRequest {
+  string session_id = 1;
+  repeated string command = 2;
+  optional uint32 timeout_secs = 3;
+  map<string, string> env = 4;
+  optional string workdir = 5;
+  bool stream = 6;
+}
+
+// ── Health ─────────────────────────────────────────────────────────────────
+
+message HealthRequest {}
+
+message HealthResponse {
+  string status = 1;
+  string timestamp = 2;
+}

@@ -1,0 +1,49 @@
+{
+  "id": "39c9f8e4-f898-44da-99c8-01af461f1f32",
+  "name": "Zypi Sandboxed Python Pipeline",
+  "description": "Runs data processing in Firecracker microVMs via Zypi",
+  "nodes": [
+    {
+      "id": "136ea725-ee10-4341-85bc-e64c6fac4efe",
+      "node_type": "zypi.exec",
+      "name": "Process Data in Sandbox",
+      "config": {
+        "url": {"type": "String", "value": "http://localhost:4000"},
+        "image": {"type": "String", "value": "ubuntu:24.04"},
+        "command": {"type": "Array", "value": [
+          {"type": "String", "value": "/usr/bin/python3"},
+          {"type": "String", "value": "-c"},
+          {"type": "String", "value": "import os, json; v=int(os.environ.get('VALUE',0)); t=os.environ.get('TEXT',''); print(json.dumps({'squared': v**2, 'length': len(t)}))"}
+        ]},
+        "timeout": {"type": "Number", "value": 30}
+      },
+      "retry_policy": {
+        "max_attempts": 3,
+        "delay_ms": 1000,
+        "backoff_multiplier": 2.0,
+        "max_delay_ms": 60000,
+        "retry_on_timeout": true
+      }
+    },
+    {
+      "id": "b8552d47-83f5-4eaa-95e5-cfed904d0fd1",
+      "node_type": "debug.log",
+      "name": "Log Zypi Output",
+      "config": {}
+    }
+  ],
+  "connections": [
+    {
+      "from_node": "136ea725-ee10-4341-85bc-e64c6fac4efe",
+      "from_port": "output",
+      "to_node": "b8552d47-83f5-4eaa-95e5-cfed904d0fd1",
+      "to_port": "message"
+    }
+  ],
+  "triggers": [],
+  "settings": {
+    "max_execution_time_ms": 60000,
+    "max_parallel_nodes": 5,
+    "on_error": "StopWorkflow"
+  }
+}

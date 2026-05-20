@@ -1,0 +1,118 @@
+🚀 Flow Engine Test Script
+==========================
+
+[1;33mChecking if server is running...[0m
+[0;32m✓ Server is running[0m
+
+[0;34mTest 1: Health Check[0m
+{
+  "service": "flowengine",
+  "status": "healthy",
+  "version": "0.1.0"
+}
+[0;32m✓ Health check passed[0m
+
+[0;34mTest 2: List Available Node Types[0m
+[
+  {
+    "category": "docker",
+    "description": "Execute a Docker container with extensive configuration options",
+    "type": "docker.run"
+  },
+  {
+    "category": "http",
+    "description": "Make HTTP requests",
+    "type": "http.request"
+  },
+  {
+    "category": "transform",
+    "description": "Parse JSON string",
+    "type": "transform.json_parse"
+  },
+  {
+    "category": "debug",
+    "description": "Logs input values for debugging",
+    "type": "debug.log"
+  },
+  {
+    "category": "transform",
+    "description": "Convert value to JSON string",
+    "type": "transform.json_stringify"
+  },
+  {
+    "category": "time",
+    "description": "Delay execution for specified milliseconds",
+    "type": "time.delay"
+  }
+]
+[0;32m✓ Node types retrieved[0m
+
+[0;34mTest 4: List All Workflows[0m
+[
+  {
+    "connections": 1,
+    "description": "Fetches GitHub zen quote and logs it",
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "name": "GitHub API Example",
+    "nodes": 2
+  }
+]
+[0;32m✓ Workflows listed[0m
+
+[0;34mTest 5: Get Workflow Details[0m
+Workflow ID: [0;34mTest 3: Create Workflow[0m
+[1;33mRequest body:[0m
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "name": "GitHub API Example",
+  "description": "Fetches GitHub zen quote and logs it",
+  "nodes": [
+    {
+      "id": "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d",
+      "node_type": "http.request",
+      "name": "Fetch GitHub Zen",
+      "config": {},
+      "position": {
+        "x": 100,
+        "y": 100
+      },
+      "retry_policy": null
+    },
+    {
+      "id": "b2c3d4e5-f6a7-4b5c-8d9e-0f1a2b3c4d5e",
+      "node_type": "debug.log",
+      "name": "Log Response",
+      "config": {},
+      "position": {
+        "x": 400,
+        "y": 100
+      },
+      "retry_policy": null
+    }
+  ],
+  "connections": [
+    {
+      "from_node": "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d",
+      "from_port": "body",
+      "to_node": "b2c3d4e5-f6a7-4b5c-8d9e-0f1a2b3c4d5e",
+      "to_port": "message"
+    }
+  ],
+  "triggers": [],
+  "settings": {
+    "max_execution_time_ms": null,
+    "max_parallel_nodes": 10,
+    "on_error": "StopWorkflow"
+  }
+}
+[1;33mSending request...[0m
+[1;33mHTTP Status: 201[0m
+[1;33mResponse body:[0m
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "message": "Workflow created successfully"
+}
+Created workflow: 550e8400-e29b-41d4-a716-446655440000
+[0;32m✓ Workflow created[0m
+
+550e8400-e29b-41d4-a716-446655440000
