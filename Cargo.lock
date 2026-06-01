@@ -202,15 +202,18 @@ dependencies = [
 
 [[package]]
 name = "actix-ws"
-version = "0.2.5"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "535aec173810be3ca6f25dd5b4d431ae7125d62000aa3cbae1ec739921b02cf3"
+checksum = "decf53c3cdd63dd6f289980b430238f9a2f6d19f8bce8e418272e08d3da43f0f"
 dependencies = [
  "actix-codec",
  "actix-http",
  "actix-web",
+ "bytestring",
  "futures-core",
+ "futures-sink",
  "tokio",
+ "tokio-util",
 ]
 
 [[package]]
@@ -4242,6 +4245,7 @@ dependencies = [
  "bytes",
  "futures-core",
  "futures-sink",
+ "futures-util",
  "pin-project-lite",
  "tokio",
 ]
