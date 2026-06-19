@@ -1,0 +1,27 @@
+id: "550e8400-e29b-41d4-a716-446655440000"
+name: "Example Shell Pipeline (YAML)"
+description: "Demonstrates YAML workflow format — runs a shell command and logs output"
+nodes:
+  - id: "a1b2c3d4-e5f6-7890-abcd-ef0123456789"
+    node_type: "shell.exec"
+    name: "Run Command"
+    config:
+      command: "echo"
+      args:
+        - "Hello from YAML workflow!"
+    position:
+      x: 100.0
+      y: 100.0
+  - id: "f9e8d7c6-b5a4-3210-fedc-ba0987654321"
+    node_type: "debug.log"
+    name: "Log Result"
+    config:
+      level: "info"
+    position:
+      x: 300.0
+      y: 100.0
+connections:
+  - from_node: "a1b2c3d4-e5f6-7890-abcd-ef0123456789"
+    from_port: "stdout"
+    to_node: "f9e8d7c6-b5a4-3210-fedc-ba0987654321"
+    to_port: "message"

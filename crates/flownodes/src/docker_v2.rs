@@ -245,6 +245,9 @@ impl DockerNodeV2 {
                 json!(map)
             }
             Value::Bytes(_) => json!(null), // Can't represent bytes in JSON
+            Value::StringArc(s) => json!(s.as_str()),
+            Value::BytesArc(_) => json!(null),
+            Value::JsonArc(j) => j.as_ref().clone(),
         }
     }
     

@@ -129,6 +129,14 @@ pub struct NodeMetadata {
     pub custom: HashMap<String, Value>,
 }
 
+/// Description of a node's input or output port
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PortDefinition {
+    pub name: String,
+    pub description: String,
+    pub required: bool,
+}
+
 impl Default for NodeMetadata {
     fn default() -> Self {
         Self {

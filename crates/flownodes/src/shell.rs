@@ -7,6 +7,7 @@
 
 use async_trait::async_trait;
 use flowcore::{Node, NodeContext, NodeError, NodeOutput, Value};
+use flowcore_macros::NodeConfig;
 use flowruntime::{NodeFactory, NodeMetadata};
 use std::collections::HashMap;
 use std::process::Stdio;
@@ -15,45 +16,47 @@ use tokio::process::Command;
 
 pub struct ShellExecNode;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default, NodeConfig)]
+#[config(name = "shell")]
 struct ShellConfig {
+    /// Base config via derive for simple fields
     command: String,
-    args: Vec<String>,
-    env: HashMap<String, String>,
     workdir: Option<String>,
     timeout_seconds: Option<u64>,
+    #[config(default = "false")]
     shell: bool,
+    #[config(default = "true")]
     capture_stdout: bool,
+    #[config(default = "true")]
     capture_stderr: bool,
+    #[config(default = "false")]
     stream_output: bool,
+    #[config(default = "true")]
     strip_trailing_newline: bool,
+    // Complex fields handled manually
+    #[config(skip)]
+    args: Vec<String>,
+    #[config(skip)]
+    env: HashMap<String, String>,
 }
 
 impl ShellConfig {
     fn from_ctx(ctx: &NodeContext) -> Result<Self, NodeError> {
-        let command = ctx
-            .require_config("command")?
-            .as_str()
-            .ok_or_else(|| {
-                NodeError::Configuration("command must be a string".to_string())
-            })?
-            .to_string();
+        // Base config via derive for simple fields
+        let mut config = ShellConfig::try_from(&ctx.config)
+            .map_err(|e| NodeError::Configuration(e))?;
 
-        let args: Vec<String> = ctx
-            .config
-            .get("args")
-            .and_then(|v| match v {
-                Value::Array(arr) => Some(
-                    arr.iter()
-                        .filter_map(|v| v.as_str().map(String::from))
-                        .collect(),
-                ),
-                Value::String(s) => Some(
-                    s.split_whitespace().map(String::from).collect(),
-                ),
-                _ => None,
+        // Manually extract complex fields
+        let args: Vec<String> = ctx.config.get("args")
+            .map(|v| match v {
+                Value::Array(arr) => arr.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect(),
+                Value::String(s) => s.split_whitespace().map(String::from).collect(),
+                _ => vec![],
             })
             .unwrap_or_default();
+        config.args = args;
 
         let mut env = HashMap::new();
         if let Some(Value::Object(env_obj)) = ctx.config.get("env") {
@@ -63,8 +66,6 @@ impl ShellConfig {
                 }
             }
         }
-
-        // Passthrough env vars
         if let Some(Value::Array(pass)) = ctx.config.get("env_passthrough") {
             for var in pass {
                 if let Some(var_name) = var.as_str() {
@@ -74,61 +75,9 @@ impl ShellConfig {
                 }
             }
         }
+        config.env = env;
 
-        let workdir = ctx
-            .config
-            .get("workdir")
-            .and_then(|v| v.as_str())
-            .map(String::from);
-
-        let timeout_seconds = ctx
-            .config
-            .get("timeout")
-            .and_then(|v| v.as_f64())
-            .map(|f| f as u64);
-
-        let shell = ctx
-            .config
-            .get("shell")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
-
-        let capture_stdout = ctx
-            .config
-            .get("capture_stdout")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(true);
-
-        let capture_stderr = ctx
-            .config
-            .get("capture_stderr")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(true);
-
-        let stream_output = ctx
-            .config
-            .get("stream_output")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
-
-        let strip_trailing_newline = ctx
-            .config
-            .get("strip_trailing_newline")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(true);
-
-        Ok(Self {
-            command,
-            args,
-            env,
-            workdir,
-            timeout_seconds,
-            shell,
-            capture_stdout,
-            capture_stderr,
-            stream_output,
-            strip_trailing_newline,
-        })
+        Ok(config)
     }
 }
 

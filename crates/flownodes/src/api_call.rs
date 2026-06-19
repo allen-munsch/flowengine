@@ -52,7 +52,7 @@ impl ApiCallNode {
                 NodeError::Configuration("script is required".to_string())
             })?;
 
-        let timeout = ctx
+        let _timeout = ctx
             .config
             .get("timeout")
             .and_then(|v| v.as_f64())

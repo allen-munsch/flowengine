@@ -6,16 +6,20 @@
 mod error;
 pub mod events;
 mod node;
+pub mod parser;
+pub mod plugin;
 mod value;
 mod workflow;
 
 pub use error::{FlowError, NodeError, WorkflowError};
-pub use node::{Node, NodeContext, NodeOutput, NodeMetadata, NodeState};
+pub use node::{Node, NodeContext, NodeOutput, NodeMetadata, NodeState, PortDefinition};
 pub use workflow::{
     Workflow, WorkflowId, NodeId, NodeSpec, Connection, 
-    TriggerSpec, TriggerType, ErrorHandling  // <-- Add ErrorHandling
+    TriggerSpec, TriggerType, ErrorHandling
 };
 pub use value::Value;
+pub use parser::{WorkflowParser, JsonParser, YamlParser, parse_workflow, parse_workflow_file};
+pub use plugin::{NodePlugin, PluginMetadata};
 pub use events::*;
 
 /// Result type for flow operations

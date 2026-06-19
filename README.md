@@ -7,6 +7,7 @@ Designed for sandboxed, parallel DAG execution with Firecracker microVMs.
 
 - ✨ **Event-Driven Architecture** — Reactive, real-time workflows with broadcast events
 - ⚡ **Parallel DAG Execution** — Configurable parallelism with topological sort
+- 📄 **Multi-Format Workflows** — JSON and YAML workflow definitions with auto-detection
 - 🔥 **Firecracker Sandboxing** — Execute nodes in Zypi Firecracker microVMs (sub-second boot)
 - 🌐 **Headless Browser** — Render HTML/URLs in sandboxed Chromium (dom, text, screenshots)
 - 🐚 **Shell & Process Nodes** — Run local commands with streaming stdout/stderr
@@ -15,7 +16,7 @@ Designed for sandboxed, parallel DAG execution with Firecracker microVMs.
 - 💾 **SQLite Persistence** — Save/load workflows, execution history, node-level result caching
 - 📡 **Streaming Output** — Real-time stdout/stderr line streaming via WebSocket/CLI
 - 🐍 **Python SDK** — `@task` decorator, `Flow` DAG builder, `Sandbox` for Zypi
-- 🎯 **Type-Safe** — Rust type system for reliability, no runtime surprises
+- 🎯 **Type-Safe** — Rust type system for reliability, `#[derive(NodeConfig)]` derive macro, no runtime surprises
 - 📊 **Observability** — Detailed execution metrics, tracing, event bus
 
 ## How It Compares
@@ -37,8 +38,9 @@ FlowEngine focuses on speed, sandboxing, and streaming. Here's how it stacks up 
 
 ```
 flowengine/
-├── flowcore      - Core abstractions (Node trait, Value type, Events, RetryPolicy)
-├── flowruntime   - Execution engine (DAG executor, Registry, Runtime)
+├── flowcore          - Core abstractions (Node trait, Value type, Events, RetryPolicy)
+├── flowcore_macros   - Derive macros (`#[derive(NodeConfig)]`)
+├── flowruntime       - Execution engine (DAG executor, Registry, Runtime)
 ├── flownodes     - Standard node library (shell, zypi, docker, http, transform, debug)
 ├── flowpersist   - SQLite-backed persistence & result caching
 ├── flowserver    - HTTP/WebSocket API server (Actix-based)
@@ -54,11 +56,11 @@ flowengine/
 cargo build --release
 ```
 
-### Run a Shell Pipeline
+### Run a Shell Pipeline (YAML)
 
 ```bash
 ./target/release/flow run \
-  --file examples/shell_pipeline.json \
+  --file examples/shell_pipeline.yaml \
   --verbose
 ```
 
@@ -83,7 +85,7 @@ cd ../../exs/zypi && docker compose up -d
 # → WebSocket: ws://localhost:3000/api/events
 ```
 
-See [API Documentation](docs/api.md) for full HTTP endpoints.
+See [Documentation Index](docs/INDEX.md) for all guides and references.
 
 ## Python SDK
 

@@ -8,58 +8,26 @@ Fast, lightweight workflow orchestration. Like Prefect but Rust-fast and Firecra
 pip install -e python/
 ```
 
-## Quick Start
-
-### Define and run a workflow
+## Quick Example
 
 ```python
-from flowengine import Flow, task
-import requests
+from flowengine import task, Flow
 
 @task(retry=3, timeout=30)
 def fetch_data(url: str) -> dict:
+    import requests
     return requests.get(url).json()
 
-@task()
-def process(data: dict) -> str:
-    return f"Got: {data}"
-
-flow = Flow("my-first-flow")
-flow >> fetch_data >> process
+flow = Flow("my-flow")
+flow >> fetch_data
 result = flow.run(url="https://api.github.com/zen")
 ```
 
-### Sandboxed execution (Zypi/Firecracker)
+## Full Documentation
 
-```python
-from flowengine import Sandbox
+See [docs/using/python-sdk.md](../docs/using/python-sdk.md) for the complete reference: `@task` decorator, `Flow`, `FlowBuilder`, `FlowClient`, `Sandbox`, and more.
 
-sandbox = Sandbox(image="ubuntu:24.04")
-exit_code, stdout, stderr = sandbox.exec(
-    ["python3", "-c", "print('hello from firecracker VM!')"]
-)
-```
-
-### Without a server — use the CLI
-
-```python
-from flowengine import Flow, task
-
-@task()
-def hello(name: str) -> str:
-    return f"Hello, {name}!"
-
-flow = Flow("hello-flow")
-flow >> hello
-flow.save("hello_workflow.json")
-```
-
-Then run:
-```bash
-flow run --file hello_workflow.json --input '{"name": "World"}'
-```
-
-## Why FlowEngine over Prefect?
+## Why FlowEngine?
 
 | | FlowEngine | Prefect |
 |---|---|---|

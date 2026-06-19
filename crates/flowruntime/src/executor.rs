@@ -2,10 +2,13 @@ use flowcore::{
     ExecutionEvent, EventBus, FlowError, Node, NodeContext, NodeId, 
     Value, Workflow, WorkflowError, ExecutionId,
 };
+use crate::executor_cache::ExecutorCache;
 use crate::registry::NodeRegistry;
+use crate::tracker::DependencyTracker;
 use chrono::Utc;
 use futures::stream::{FuturesUnordered, StreamExt};
-use petgraph::graph::{DiGraph, NodeIndex};
+use flowpersist::PersistentStore;
+use petgraph::graph::DiGraph;
 use petgraph::algo::toposort;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -15,11 +18,18 @@ use tokio::time::{timeout, Duration};
 /// Executes workflows as DAGs with parallel execution
 pub struct WorkflowExecutor {
     max_parallel: usize,
+    cache: Option<Arc<ExecutorCache>>,
 }
 
 impl WorkflowExecutor {
     pub fn new(max_parallel: usize) -> Self {
-        Self { max_parallel }
+        Self { max_parallel, cache: None }
+    }
+
+    /// Enable result caching with a persistent store.
+    pub fn with_cache(mut self, store: Arc<PersistentStore>) -> Self {
+        self.cache = Some(Arc::new(ExecutorCache::new(store)));
+        self
     }
     
     /// Execute a workflow and return results
@@ -67,6 +77,7 @@ impl WorkflowExecutor {
             event_bus,
             execution_id,
             initial_inputs,
+            self.cache.clone(),
         ).await;
         
         let duration_ms = start_time.elapsed().as_millis() as u64;
@@ -116,21 +127,17 @@ impl WorkflowExecutor {
     async fn execute_dag(
         &self,
         workflow: &Workflow,
-        graph: DiGraph<NodeId, ()>,
+        _graph: DiGraph<NodeId, ()>,
         mut node_instances: HashMap<NodeId, Box<dyn Node>>,
         event_bus: &EventBus,
         execution_id: ExecutionId,
         initial_inputs: HashMap<String, Value>,
+        cache: Option<Arc<ExecutorCache>>,
     ) -> Result<ExecutionResult, FlowError> {
-        let mut completed = HashSet::new();
         let mut node_outputs: HashMap<NodeId, HashMap<String, Value>> = HashMap::new();
         let mut running = FuturesUnordered::new();
-        let node_to_index: HashMap<NodeId, NodeIndex> = graph
-            .node_indices()
-            .map(|idx| (*graph.node_weight(idx).unwrap(), idx))
-            .collect();
+        let mut tracker = DependencyTracker::new(workflow);
         
-        // Store initial inputs for nodes without dependencies
         let mut initial_map = HashMap::new();
         for (key, value) in initial_inputs {
             initial_map.insert(key, value);
@@ -140,10 +147,8 @@ impl WorkflowExecutor {
         }
         
         loop {
-            // Find nodes ready to execute (all dependencies completed)
-            let ready_nodes = self.find_ready_nodes(&graph, &node_to_index, &completed);
+            let ready_nodes = tracker.ready_nodes();
             
-            // Spawn tasks for ready nodes up to parallel limit
             for node_id in ready_nodes {
                 if running.len() >= self.max_parallel {
                     break;
@@ -155,14 +160,35 @@ impl WorkflowExecutor {
                 let node = node_instances.remove(&node_id)
                     .ok_or_else(|| WorkflowError::NodeNotFound(node_id.to_string()))?;
                 
-                // Collect inputs from predecessor nodes
-                let inputs = self.collect_node_inputs(
-                    node_id,
-                    workflow,
-                    &graph,
-                    &node_to_index,
-                    &node_outputs,
-                );
+                let inputs = self.collect_node_inputs(node_id, workflow, &node_outputs);
+                
+                // Cache check
+                let _cache_hit = if let Some(ref cache) = cache {
+                    let config_hash = PersistentStore::compute_hash(&node_spec.config);
+                    let input_hash = PersistentStore::compute_hash(&inputs);
+                    let cached = cache.check(&node_spec.node_type, &config_hash, &input_hash).await;
+                    if let Some(outputs) = cached {
+                        tracing::debug!("Cache hit for node {}", node_id);
+                        node_outputs.insert(node_id, outputs.into_iter()
+                            .map(|(k, v)| (k, v.to_arc())).collect());
+                        let downstream: HashSet<NodeId> = workflow.connections.iter()
+                            .filter(|c| c.from_node == node_id)
+                            .map(|c| c.to_node).collect();
+                        for target in downstream {
+                            tracker.mark_satisfied(target);
+                        }
+                        event_bus.emit(ExecutionEvent::NodeCompleted {
+                            execution_id, node_id,
+                            outputs: HashMap::new(),
+                            duration_ms: 0,
+                            timestamp: Utc::now(),
+                        });
+                        continue;
+                    }
+                    Some((config_hash, input_hash))
+                } else {
+                    None
+                };
                 
                 let ctx = NodeContext {
                     node_id,
@@ -173,7 +199,6 @@ impl WorkflowExecutor {
                     cancellation: tokio_util::sync::CancellationToken::new(),
                 };
                 
-                // Emit node started event
                 event_bus.emit(ExecutionEvent::NodeStarted {
                     execution_id,
                     node_id,
@@ -181,40 +206,30 @@ impl WorkflowExecutor {
                     timestamp: Utc::now(),
                 });
                 
-                // Get retry policy from node spec
                 let retry_policy = node_spec.retry_policy.clone();
-
-                // Spawn execution task with retry
                 let task = async move {
                     let mut last_error = None;
                     let max_attempts = retry_policy.as_ref()
                         .map(|r| r.max_attempts)
                         .unwrap_or(1);
-
                     for attempt in 0..max_attempts {
                         if attempt > 0 {
                             let delay_ms = retry_policy.as_ref()
                                 .map(|r| r.delay_for_attempt(attempt))
                                 .unwrap_or(1000);
-                            tracing::warn!(
-                                "Retrying node {} (attempt {}/{}) after {}ms",
-                                node_id, attempt + 1, max_attempts, delay_ms
-                            );
+                            tracing::warn!("Retrying node {} (attempt {}/{}) after {}ms",
+                                node_id, attempt + 1, max_attempts, delay_ms);
                             tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
                         }
-
                         let start = Instant::now();
                         let result = node.execute(ctx.clone()).await;
                         let duration_ms = start.elapsed().as_millis() as u64;
-
                         match result {
                             Ok(output) => return (node_id, Ok(output), duration_ms),
                             Err(e) => {
                                 let is_timeout = matches!(e, flowcore::NodeError::Timeout { .. });
                                 let retry_on_timeout = retry_policy.as_ref()
-                                    .map(|r| r.retry_on_timeout)
-                                    .unwrap_or(true);
-
+                                    .map(|r| r.retry_on_timeout).unwrap_or(true);
                                 if is_timeout && !retry_on_timeout {
                                     return (node_id, Err(e), duration_ms);
                                 }
@@ -222,37 +237,29 @@ impl WorkflowExecutor {
                             }
                         }
                     }
-
                     (node_id, Err(last_error.unwrap()), 0)
                 };
                 
-                // Apply timeout if specified
                 if let Some(timeout_ms) = workflow.settings.max_execution_time_ms {
                     let duration = Duration::from_millis(timeout_ms);
                     let task_with_timeout = async move {
                         match timeout(duration, task).await {
                             Ok(result) => result,
-                            Err(_) => {
-                                // Timeout occurred
-                                (node_id, Err(flowcore::NodeError::Timeout { 
-                                    seconds: timeout_ms / 1000 
-                                }), timeout_ms)
-                            }
+                            Err(_) => (node_id, Err(flowcore::NodeError::Timeout {
+                                seconds: timeout_ms / 1000
+                            }), timeout_ms)
                         }
                     };
-                    
                     running.push(tokio::spawn(task_with_timeout));
                 } else {
                     running.push(tokio::spawn(task));
                 }
             }
             
-            // If nothing is running and nothing is ready, we're done
-            if running.is_empty() {
+            if running.is_empty() && tracker.all_scheduled() {
                 break;
             }
             
-            // Wait for next task to complete
             if let Some(result) = running.next().await {
                 let (node_id, exec_result, duration_ms) = result
                     .map_err(|e| FlowError::Execution(format!("Task join error: {}", e)))?;
@@ -260,45 +267,61 @@ impl WorkflowExecutor {
                 match exec_result {
                     Ok(output) => {
                         tracing::info!("Node {} completed in {}ms", node_id, duration_ms);
-                        
                         event_bus.emit(ExecutionEvent::NodeCompleted {
-                            execution_id,
-                            node_id,
+                            execution_id, node_id,
                             outputs: output.outputs.clone(),
                             duration_ms,
                             timestamp: Utc::now(),
                         });
-                        
-                        node_outputs.insert(node_id, output.outputs);
-                        completed.insert(node_id);
+                        node_outputs.insert(node_id,
+                            output.outputs.clone().into_iter()
+                                .map(|(k, v)| (k, v.to_arc()))
+                                .collect());
+                        // Store in cache if enabled
+                        if let Some(ref cache) = cache {
+                            if let Some(node_spec) = workflow.find_node(node_id) {
+                                let config_hash = PersistentStore::compute_hash(&node_spec.config);
+                                let inputs = self.collect_node_inputs(node_id, workflow, &node_outputs);
+                                let input_hash = PersistentStore::compute_hash(&inputs);
+                                let outputs_map: HashMap<String, Value> = output.outputs.clone();
+                                cache.store(
+                                    &node_spec.node_type, &config_hash, &input_hash,
+                                    &outputs_map, None,
+                                ).await;
+                            }
+                        }
+                        let downstream: HashSet<NodeId> = workflow.connections.iter()
+                            .filter(|c| c.from_node == node_id)
+                            .map(|c| c.to_node)
+                            .collect();
+                        for target in downstream {
+                            tracker.mark_satisfied(target);
+                        }
                     }
                     Err(e) => {
                         tracing::error!("Node {} failed: {}", node_id, e);
-                        
                         event_bus.emit(ExecutionEvent::NodeFailed {
-                            execution_id,
-                            node_id,
+                            execution_id, node_id,
                             error: e.to_string(),
                             timestamp: Utc::now(),
                         });
-                        
-                        // Handle error based on workflow settings
                         match workflow.settings.on_error {
                             flowcore::ErrorHandling::StopWorkflow => {
                                 return Err(FlowError::Execution(format!(
-                                    "Node {} failed: {}",
-                                    node_id, e
-                                )));
+                                    "Node {} failed: {}", node_id, e)));
                             }
                             flowcore::ErrorHandling::ContinueOnError => {
-                                completed.insert(node_id);
+                                let downstream: HashSet<NodeId> = workflow.connections.iter()
+                                    .filter(|c| c.from_node == node_id)
+                                    .map(|c| c.to_node)
+                                    .collect();
+                                for target in downstream {
+                                    tracker.mark_satisfied(target);
+                                }
                             }
                             flowcore::ErrorHandling::RetryWorkflow { .. } => {
-                                // TODO: Implement workflow retry logic
                                 return Err(FlowError::Execution(format!(
-                                    "Node {} failed: {}",
-                                    node_id, e
-                                )));
+                                    "Node {} failed: {}", node_id, e)));
                             }
                         }
                     }
@@ -306,42 +329,14 @@ impl WorkflowExecutor {
             }
         }
         
+        let total_nodes = workflow.nodes.len();
+        let completed_count = total_nodes - node_instances.len();
         Ok(ExecutionResult {
             execution_id,
             outputs: node_outputs,
-            completed_nodes: completed.len(),
-            total_nodes: workflow.nodes.len(),
+            completed_nodes: completed_count,
+            total_nodes,
         })
-    }
-    
-    /// Find nodes that are ready to execute
-    fn find_ready_nodes(
-        &self,
-        graph: &DiGraph<NodeId, ()>,
-        node_to_index: &HashMap<NodeId, NodeIndex>,
-        completed: &HashSet<NodeId>,
-    ) -> Vec<NodeId> {
-        let mut ready = Vec::new();
-        
-        for (node_id, idx) in node_to_index {
-            if completed.contains(node_id) {
-                continue;
-            }
-            
-            // Check if all dependencies are completed
-            let dependencies_met = graph
-                .neighbors_directed(*idx, petgraph::Direction::Incoming)
-                .all(|dep_idx| {
-                    let dep_node_id = graph.node_weight(dep_idx).unwrap();
-                    completed.contains(dep_node_id)
-                });
-            
-            if dependencies_met {
-                ready.push(*node_id);
-            }
-        }
-        
-        ready
     }
     
     /// Collect inputs for a node from its predecessors
@@ -349,8 +344,6 @@ impl WorkflowExecutor {
         &self,
         node_id: NodeId,
         workflow: &Workflow,
-        _graph: &DiGraph<NodeId, ()>,
-        _node_to_index: &HashMap<NodeId, NodeIndex>,
         node_outputs: &HashMap<NodeId, HashMap<String, Value>>,
     ) -> HashMap<String, Value> {
         let mut inputs = HashMap::new();

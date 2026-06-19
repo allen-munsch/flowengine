@@ -166,5 +166,59 @@ class FlowBuilder:
         )
         return flow
 
+    async def build_async(self, **inputs: Any) -> dict:
+        """Build and execute the workflow locally via the flow CLI (subprocess).
+
+        Serializes the workflow to JSON, pipes it into `flow run --output json -`,
+        and parses the streaming JSON events into a result dict.
+        Does not require a running server.
+        """
+        import asyncio
+        import os
+
+        flow = self.build()
+        spec_json = flow.to_json()
+
+        # Find the flow binary
+        flow_bin = os.environ.get("FLOW_BIN", "flow")
+
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                flow_bin, "run", "--file", "-", "--output", "json",
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+        except FileNotFoundError:
+            raise RuntimeError(
+                f"flow CLI binary not found at '{flow_bin}'. "
+                "Set FLOW_BIN env var or ensure 'flow' is on PATH."
+            )
+
+        stdin_data = spec_json.encode()
+        if inputs:
+            stdin_lines = [stdin_data, json.dumps(inputs).encode()]
+            stdin_data = b"\n".join(stdin_lines)
+
+        stdout, stderr = await proc.communicate(stdin_data)
+
+        if proc.returncode != 0:
+            err_msg = stderr.decode() if stderr else "Unknown error"
+            raise RuntimeError(f"Workflow execution failed: {err_msg}")
+
+        outputs = {}
+        for line in stdout.decode().strip().split("\n"):
+            if not line.strip():
+                continue
+            try:
+                event = json.loads(line)
+                if event.get("type") == "summary":
+                    for node_id, node_outputs in event.get("outputs", {}).items():
+                        outputs[node_id] = node_outputs
+            except json.JSONDecodeError:
+                continue
+
+        return {"outputs": outputs, "success": True}
+
     def __repr__(self) -> str:
         return f"FlowBuilder({self.name!r}, tasks={len(self._tasks)})"

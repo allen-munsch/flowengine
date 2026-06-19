@@ -16,6 +16,9 @@ pub enum FlowError {
     
     #[error("Serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
+
+    #[error("Parse error: {0}")]
+    Parse(String),
 }
 
 #[derive(Error, Debug, Clone)]

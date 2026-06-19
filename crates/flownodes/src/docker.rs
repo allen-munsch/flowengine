@@ -3,6 +3,7 @@
 
 use async_trait::async_trait;
 use flowcore::{Node, NodeContext, NodeError, NodeOutput, Value};
+use flowcore_macros::NodeConfig;
 use flowruntime::{NodeFactory, NodeMetadata, PortDefinition};
 use std::collections::HashMap;
 use std::process::Stdio;
@@ -12,23 +13,34 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 /// Node that executes Docker containers with extensive configuration options
 pub struct DockerNode;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default, NodeConfig)]
 struct DockerConfig {
     image: String,
+    #[config(skip)]
     command: Option<Vec<String>>,
+    #[config(skip)]
     entrypoint: Option<Vec<String>>,
+    #[config(skip)]
     env: HashMap<String, String>,
+    #[config(skip)]
     volumes: Vec<VolumeMount>,
+    #[config(rename = "workdir")]
     working_dir: Option<String>,
     user: Option<String>,
     network: Option<String>,
     cpu_limit: Option<String>,
     memory_limit: Option<String>,
+    #[config(skip)]
     stdin_mode: StdinMode,
+    #[config(skip)]
     output_mode: OutputMode,
+    #[config(default = "true")]
     auto_pull: bool,
+    #[config(default = "false")]
     detached: bool,
+    #[config(default = "true")]
     remove: bool,
+    #[config(rename = "timeout")]
     timeout_seconds: Option<u64>,
 }
 
@@ -39,33 +51,33 @@ struct VolumeMount {
     read_only: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 enum StdinMode {
+    #[default]
     None,       // No stdin
     Raw,        // Send raw bytes
     Json,       // Serialize as JSON
     Text,       // Send as text
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 enum OutputMode {
+    #[default]
     Auto,       // Try JSON, fallback to string
     Json,       // Force JSON parsing
     Text,       // Always return as string
 }
 
-impl DockerNode {
-    fn parse_config(ctx: &NodeContext) -> Result<DockerConfig, NodeError> {
-        let image = ctx.require_config("image")?
-            .as_str()
-            .ok_or_else(|| NodeError::Configuration("image must be a string".to_string()))?
-            .to_string();
-        
+impl DockerConfig {
+    fn from_ctx(ctx: &NodeContext) -> Result<Self, NodeError> {
+        // Base config via derive for simple fields
+        let mut config = DockerConfig::try_from(&ctx.config)
+            .map_err(|e| NodeError::Configuration(e))?;
+
         // Parse command - can be string or array
-        let command = ctx.config.get("command")
+        config.command = ctx.config.get("command")
             .and_then(|v| match v {
                 Value::String(s) => {
-                    // Split string into shell words
                     Some(shell_words::split(s).unwrap_or_else(|_| vec![s.clone()]))
                 }
                 Value::Array(arr) => {
@@ -73,9 +85,9 @@ impl DockerNode {
                 }
                 _ => None,
             });
-        
+
         // Parse entrypoint
-        let entrypoint = ctx.config.get("entrypoint")
+        config.entrypoint = ctx.config.get("entrypoint")
             .and_then(|v| match v {
                 Value::String(s) => Some(vec![s.clone()]),
                 Value::Array(arr) => {
@@ -83,7 +95,7 @@ impl DockerNode {
                 }
                 _ => None,
             });
-        
+
         // Parse environment variables
         let mut env = HashMap::new();
         if let Some(Value::Object(env_obj)) = ctx.config.get("env") {
@@ -95,8 +107,9 @@ impl DockerNode {
                 }
             }
         }
-        
-        // Parse volumes - format: "host_path:container_path" or "host_path:container_path:ro"
+        config.env = env;
+
+        // Parse volumes
         let mut volumes = Vec::new();
         if let Some(Value::Array(vols)) = ctx.config.get("volumes") {
             for vol in vols {
@@ -107,30 +120,10 @@ impl DockerNode {
                 }
             }
         }
-        
-        // Parse other Docker options
-        let working_dir = ctx.config.get("workdir")
-            .and_then(|v| v.as_str())
-            .map(String::from);
-        
-        let user = ctx.config.get("user")
-            .and_then(|v| v.as_str())
-            .map(String::from);
-        
-        let network = ctx.config.get("network")
-            .and_then(|v| v.as_str())
-            .map(String::from);
-        
-        let cpu_limit = ctx.config.get("cpu_limit")
-            .and_then(|v| v.as_str())
-            .map(String::from);
-        
-        let memory_limit = ctx.config.get("memory_limit")
-            .and_then(|v| v.as_str())
-            .map(String::from);
-        
+        config.volumes = volumes;
+
         // Parse stdin mode
-        let stdin_mode = ctx.config.get("stdin_mode")
+        config.stdin_mode = ctx.config.get("stdin_mode")
             .and_then(|v| v.as_str())
             .and_then(|s| match s {
                 "none" => Some(StdinMode::None),
@@ -140,9 +133,9 @@ impl DockerNode {
                 _ => None,
             })
             .unwrap_or(StdinMode::Json);
-        
+
         // Parse output mode
-        let output_mode = ctx.config.get("output_mode")
+        config.output_mode = ctx.config.get("output_mode")
             .and_then(|v| v.as_str())
             .and_then(|s| match s {
                 "auto" => Some(OutputMode::Auto),
@@ -151,43 +144,10 @@ impl DockerNode {
                 _ => None,
             })
             .unwrap_or(OutputMode::Auto);
-        
-        let auto_pull = ctx.config.get("auto_pull")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(true);
-        
-        let detached = ctx.config.get("detached")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
-        
-        let remove = ctx.config.get("remove")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(true);
-        
-        let timeout_seconds = ctx.config.get("timeout")
-            .and_then(|v| v.as_f64())
-            .map(|f| f as u64);
-        
-        Ok(DockerConfig {
-            image,
-            command,
-            entrypoint,
-            env,
-            volumes,
-            working_dir,
-            user,
-            network,
-            cpu_limit,
-            memory_limit,
-            stdin_mode,
-            output_mode,
-            auto_pull,
-            detached,
-            remove,
-            timeout_seconds,
-        })
+
+        Ok(config)
     }
-    
+
     fn parse_volume(volume_str: &str) -> Option<VolumeMount> {
         let parts: Vec<&str> = volume_str.split(':').collect();
         
@@ -205,6 +165,9 @@ impl DockerNode {
             _ => None,
         }
     }
+}
+
+impl DockerNode {
     
     async fn pull_image_if_needed(image: &str, ctx: &NodeContext) -> Result<(), NodeError> {
         ctx.events.info(format!("Checking for image: {}", image));
@@ -279,7 +242,7 @@ impl Node for DockerNode {
     }
     
     async fn execute(&self, ctx: NodeContext) -> Result<NodeOutput, NodeError> {
-        let config = Self::parse_config(&ctx)?;
+        let config = DockerConfig::from_ctx(&ctx)?;
         
         ctx.events.info(format!("🐳 Running Docker image: {}", config.image));
         

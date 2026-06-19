@@ -31,6 +31,10 @@ enum Commands {
         /// Show verbose output
         #[arg(short, long)]
         verbose: bool,
+
+        /// Output format: "text" (default) or "json"
+        #[arg(short = 'F', long, default_value = "text")]
+        output: String,
     },
     
     /// Validate a workflow file
@@ -81,7 +85,7 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
     
     match cli.command {
-        Commands::Run { file, input, verbose } => {
+        Commands::Run { file, input, verbose, output } => {
             // Initialize logging
             if verbose {
                 tracing_subscriber::fmt()
@@ -93,7 +97,7 @@ async fn main() -> Result<()> {
                     .init();
             }
             
-            run_workflow(file, input).await?;
+            run_workflow(file, input, output).await?;
         }
         
         Commands::Validate { file } => {
@@ -112,17 +116,25 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-async fn run_workflow(file: PathBuf, input: Option<String>) -> Result<()> {
-    println!("🚀 Loading workflow from: {}", file.display());
+async fn run_workflow(file: PathBuf, input: Option<String>, output: String) -> Result<()> {
+    use flowcore::parse_workflow_file;
+    let use_json_output = output == "json";
     
-    // Load workflow
+    if !use_json_output {
+        println!("🚀 Loading workflow from: {}", file.display());
+    }
+    
+    // Load workflow using format detection
     let workflow_json = std::fs::read_to_string(&file)?;
-    let workflow: Workflow = serde_json::from_str(&workflow_json)?;
+    let workflow: Workflow = parse_workflow_file(&file, &workflow_json)
+        .map_err(|e| anyhow::anyhow!("{}", e))?;
     
-    println!("📋 Workflow: {}", workflow.name);
-    println!("   Nodes: {}", workflow.nodes.len());
-    println!("   Connections: {}", workflow.connections.len());
-    println!();
+    if !use_json_output {
+        println!("📋 Workflow: {}", workflow.name);
+        println!("   Nodes: {}", workflow.nodes.len());
+        println!("   Connections: {}", workflow.connections.len());
+        println!();
+    }
     
     // Parse input data - convert plain JSON to Value types
     let inputs: HashMap<String, Value> = if let Some(input_str) = input {
@@ -156,48 +168,90 @@ async fn run_workflow(file: PathBuf, input: Option<String>) -> Result<()> {
     // Spawn event listener
     let event_task = tokio::spawn(async move {
         while let Ok(event) = events.recv().await {
-            match event {
-                ExecutionEvent::WorkflowStarted { .. } => {
-                    println!("▶️  Workflow started");
-                }
-                ExecutionEvent::NodeStarted { node_id, node_type, .. } => {
-                    println!("  ⚡ Starting node: {} ({})", node_id, node_type);
-                }
-                ExecutionEvent::NodeCompleted { node_id, duration_ms, .. } => {
-                    println!("  ✅ Node {} completed in {}ms", node_id, duration_ms);
-                }
-                ExecutionEvent::NodeFailed { node_id, error, .. } => {
-                    println!("  ❌ Node {} failed: {}", node_id, error);
-                }
-                ExecutionEvent::NodeEvent { node_id, event, .. } => {
-                    match event {
-                        flowcore::NodeEvent::Info { message } => {
-                            println!("     ℹ️  [{}] {}", node_id, message);
-                        }
-                        flowcore::NodeEvent::Warning { message } => {
-                            println!("     ⚠️  [{}] {}", node_id, message);
-                        }
-                        flowcore::NodeEvent::Progress { percent, message } => {
-                            if let Some(msg) = message {
-                                println!("     📊 [{}] {}% - {}", node_id, percent, msg);
-                            } else {
-                                println!("     📊 [{}] {}%", node_id, percent);
-                            }
-                        }
-                        flowcore::NodeEvent::StdoutLine { line } => {
-                            println!("     📤 [{}] {}", node_id, line);
-                        }
-                        flowcore::NodeEvent::StderrLine { line } => {
-                            eprintln!("     📤 [{}] {}", node_id, line);
-                        }
-                        _ => {}
+            if use_json_output {
+                // Emit JSON line for each event
+                let json_event = match &event {
+                    ExecutionEvent::WorkflowStarted { .. } => {
+                        serde_json::json!({"type": "workflow_started"})
                     }
-                }
-                ExecutionEvent::WorkflowCompleted { success, duration_ms, .. } => {
-                    if success {
-                        println!("✨ Workflow completed successfully in {}ms", duration_ms);
-                    } else {
-                        println!("💥 Workflow failed after {}ms", duration_ms);
+                    ExecutionEvent::NodeStarted { node_id, node_type, .. } => {
+                        serde_json::json!({"type": "node_started", "node_id": node_id, "node_type": node_type})
+                    }
+                    ExecutionEvent::NodeCompleted { node_id, duration_ms, .. } => {
+                        serde_json::json!({"type": "node_completed", "node_id": node_id, "duration_ms": duration_ms})
+                    }
+                    ExecutionEvent::NodeFailed { node_id, error, .. } => {
+                        serde_json::json!({"type": "node_failed", "node_id": node_id, "error": error})
+                    }
+                    ExecutionEvent::NodeEvent { node_id, event: ref node_event, .. } => {
+                        match node_event {
+                            flowcore::NodeEvent::Info { ref message } => {
+                                serde_json::json!({"type": "node_log", "node_id": node_id, "level": "info", "message": message})
+                            }
+                            flowcore::NodeEvent::Warning { ref message } => {
+                                serde_json::json!({"type": "node_log", "node_id": node_id, "level": "warning", "message": message})
+                            }
+                            flowcore::NodeEvent::Progress { percent, ref message } => {
+                                serde_json::json!({"type": "node_progress", "node_id": node_id, "percent": percent, "message": message})
+                            }
+                            flowcore::NodeEvent::StdoutLine { ref line } => {
+                                serde_json::json!({"type": "node_stdout", "node_id": node_id, "line": line})
+                            }
+                            flowcore::NodeEvent::StderrLine { ref line } => {
+                                serde_json::json!({"type": "node_stderr", "node_id": node_id, "line": line})
+                            }
+                            _ => { serde_json::json!({"type": "node_event", "node_id": node_id}) }
+                        }
+                    }
+                    ExecutionEvent::WorkflowCompleted { success, duration_ms, .. } => {
+                        serde_json::json!({"type": "workflow_completed", "success": success, "duration_ms": duration_ms})
+                    }
+                };
+                println!("{}", serde_json::to_string(&json_event).unwrap_or_default());
+            } else {
+                match event {
+                    ExecutionEvent::WorkflowStarted { .. } => {
+                        println!("▶️  Workflow started");
+                    }
+                    ExecutionEvent::NodeStarted { node_id, node_type, .. } => {
+                        println!("  ⚡ Starting node: {} ({})", node_id, node_type);
+                    }
+                    ExecutionEvent::NodeCompleted { node_id, duration_ms, .. } => {
+                        println!("  ✅ Node {} completed in {}ms", node_id, duration_ms);
+                    }
+                    ExecutionEvent::NodeFailed { node_id, error, .. } => {
+                        println!("  ❌ Node {} failed: {}", node_id, error);
+                    }
+                    ExecutionEvent::NodeEvent { node_id, event, .. } => {
+                        match event {
+                            flowcore::NodeEvent::Info { message } => {
+                                println!("     ℹ️  [{}] {}", node_id, message);
+                            }
+                            flowcore::NodeEvent::Warning { message } => {
+                                println!("     ⚠️  [{}] {}", node_id, message);
+                            }
+                            flowcore::NodeEvent::Progress { percent, message } => {
+                                if let Some(msg) = message {
+                                    println!("     📊 [{}] {}% - {}", node_id, percent, msg);
+                                } else {
+                                    println!("     📊 [{}] {}%", node_id, percent);
+                                }
+                            }
+                            flowcore::NodeEvent::StdoutLine { line } => {
+                                println!("     📤 [{}] {}", node_id, line);
+                            }
+                            flowcore::NodeEvent::StderrLine { line } => {
+                                eprintln!("     📤 [{}] {}", node_id, line);
+                            }
+                            _ => {}
+                        }
+                    }
+                    ExecutionEvent::WorkflowCompleted { success, duration_ms, .. } => {
+                        if success {
+                            println!("✨ Workflow completed successfully in {}ms", duration_ms);
+                        } else {
+                            println!("💥 Workflow failed after {}ms", duration_ms);
+                        }
                     }
                 }
             }
@@ -211,19 +265,36 @@ async fn run_workflow(file: PathBuf, input: Option<String>) -> Result<()> {
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     event_task.abort();
     
-    println!();
-    println!("📊 Execution Summary:");
-    println!("   Execution ID: {}", result.execution_id);
-    println!("   Completed: {}/{} nodes", result.completed_nodes, result.total_nodes);
-    
-    if !result.outputs.is_empty() {
+    if use_json_output {
+        let outputs_json: serde_json::Map<String, serde_json::Value> = result.outputs.iter().map(|(node_id, outputs)| {
+            let node_outputs: serde_json::Map<String, serde_json::Value> = outputs.iter().map(|(k, v)| {
+                (k.clone(), serde_json::Value::String(format!("{:?}", v)))
+            }).collect();
+            (node_id.to_string(), serde_json::Value::Object(node_outputs))
+        }).collect();
+        let summary = serde_json::json!({
+            "type": "summary",
+            "execution_id": result.execution_id,
+            "completed_nodes": result.completed_nodes,
+            "total_nodes": result.total_nodes,
+            "outputs": outputs_json
+        });
+        println!("{}", serde_json::to_string(&summary).unwrap_or_default());
+    } else {
         println!();
-        println!("📤 Outputs:");
-        for (node_id, outputs) in &result.outputs {
-            if !outputs.is_empty() {
-                println!("   Node {}:", node_id);
-                for (key, value) in outputs {
-                    println!("     {}: {:?}", key, value);
+        println!("📊 Execution Summary:");
+        println!("   Execution ID: {}", result.execution_id);
+        println!("   Completed: {}/{} nodes", result.completed_nodes, result.total_nodes);
+        
+        if !result.outputs.is_empty() {
+            println!();
+            println!("📤 Outputs:");
+            for (node_id, outputs) in &result.outputs {
+                if !outputs.is_empty() {
+                    println!("   Node {}:", node_id);
+                    for (key, value) in outputs {
+                        println!("     {}: {:?}", key, value);
+                    }
                 }
             }
         }

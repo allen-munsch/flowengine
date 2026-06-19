@@ -14,7 +14,9 @@ pub struct Workflow {
     pub description: Option<String>,
     pub nodes: Vec<NodeSpec>,
     pub connections: Vec<Connection>,
+    #[serde(default)]
     pub triggers: Vec<TriggerSpec>,
+    #[serde(default)]
     pub settings: WorkflowSettings,
 }
 

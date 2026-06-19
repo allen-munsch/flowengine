@@ -1,4 +1,5 @@
 use flowcore::{Node, NodeError, Value, WorkflowError};
+pub use flowcore::PortDefinition;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -34,13 +35,6 @@ impl Default for NodeMetadata {
             outputs: Vec::new(),
         }
     }
-}
-
-#[derive(Debug, Clone)]
-pub struct PortDefinition {
-    pub name: String,
-    pub description: String,
-    pub required: bool,
 }
 
 /// Registry of available node types
