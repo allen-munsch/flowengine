@@ -2,8 +2,6 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{DeriveInput, Type};
 
-compile_error!("flowcore_macros lib.rs was compiled!");
-
 struct FieldConfig {
     ident: syn::Ident,
     ty: Type,
@@ -29,7 +27,7 @@ fn parse_field_config(field: &syn::Field) -> FieldConfig {
             } else if meta.path.is_ident("default") {
                 let value = meta.value()?;
                 let s = value.to_string();
-                panic!("DEBUG default value string: '{}' for field '{}'", s, ident);
+                default = Some(s.trim_matches('"').to_string());
             } else if meta.path.is_ident("rename") {
                 let value = meta.value()?;
                 rename = Some(value.to_string().trim_matches('"').to_string());
@@ -65,8 +63,6 @@ fn is_option_type(ty: &Type) -> Option<&Type> {
 
 #[proc_macro_derive(NodeConfig, attributes(config))]
 pub fn derive_node_config(input: TokenStream) -> TokenStream {
-    return quote! { compile_error!("derive_node_config was called!"); }.into();
-    
     let input_ast = syn::parse_macro_input!(input as DeriveInput);
     let struct_name = &input_ast.ident;
 

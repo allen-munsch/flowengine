@@ -1,6 +1,6 @@
 [package]
 name = "flowruntime"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 
 [dependencies]
@@ -15,7 +15,6 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
-futures = "0.3"
-tokio-util = "0.7.17"
-dagrs = "0.5.0"
+futures = { workspace = true }
+tokio-util = { workspace = true }
 libloading = "0.8"

@@ -1,6 +1,6 @@
 [package]
 name = "flowserver"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 
 [[bin]]
@@ -21,9 +21,9 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
 # Actix web framework
-actix-web = "4.4"
+actix-web = "4.12"
 actix-cors = "0.7"
-actix-ws = "0.2"
+actix-ws = "0.4"
 
 # OpenAPI / Swagger
 utoipa = { version = "5", features = ["actix_extras", "uuid"] }

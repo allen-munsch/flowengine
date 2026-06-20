@@ -8,7 +8,7 @@ use serde_json;
 use std::error::Error as StdError;
 use std::fmt;
 use std::sync::Arc;
-use futures_util::StreamExt;
+use futures::StreamExt;
 
 use crate::{ExecutionEvent};
 
@@ -96,7 +96,7 @@ impl IggyEventBus {
         tracing::debug!("Creating stream: {}", self.config.stream_name);
         
         // Try to create stream
-        let stream_details = match self.client.create_stream(&self.config.stream_name, None).await {
+        let stream_details = match self.client.create_stream(&self.config.stream_name).await {
             Ok(details) => {
                 tracing::info!("Created stream: {} with ID: {}", self.config.stream_name, details.id);
                 details
@@ -136,7 +136,6 @@ impl IggyEventBus {
             &self.config.topic_name,
             1, // partitions
             CompressionAlgorithm::default(),
-            None, // replication factor
             None, // topic_id (let server assign)
             IggyExpiry::NeverExpire,
             MaxTopicSize::ServerDefault,
