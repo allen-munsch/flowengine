@@ -9,5 +9,5 @@ proc-macro = true
 [dependencies]
 syn = { version = "2", features = ["full", "extra-traits"] }
 quote = "1"
-darling = "0.20"
+darling = "0.23"
 proc-macro2 = "1"
